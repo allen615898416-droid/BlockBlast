@@ -18,6 +18,8 @@ const CELL_TEXTURE_PATHS = [
     'blockblast/cell/cell_green',
     'blockblast/cell/cell_purple',
     'blockblast/cell/cell_yellow',
+    'blockblast/cell/cell_orange',
+    'blockblast/cell/cell_cyan',
 ];
 
 const FONT_PATHS = {
@@ -580,8 +582,8 @@ export class GameApp extends Component {
             }
         }
 
-        // 参考原版使用低对比度深蓝格线，保留格子识别但避免线条过实。
-        g.strokeColor = new Color(14, 22, 54, 125);
+        // 格线：加深加实，远距离也能看清棋盘分隔。
+        g.strokeColor = new Color(14, 22, 54, 220);
         g.lineWidth = 1;
         for (let col = 1; col < GRID_COLS; col++) {
             const x = -gridWidth / 2 + col * CELL_SIZE;
@@ -728,7 +730,7 @@ export class GameApp extends Component {
         for (const cell of shape.cells) {
             const x = offsetX + cell.col * CELL_SIZE;
             const y = offsetY - cell.row * CELL_SIZE;
-            this.drawSpriteCell(g.node, x, y, cr, shape.color, 210, 'DragCell');
+            this.drawSpriteCell(g.node, x, y, cr, shape.color, 255, 'DragCell');
         }
     }
 
@@ -1154,7 +1156,7 @@ export class GameApp extends Component {
     private scheduleClearSequence(result: { clearedCells: GridPosition[]; linesCleared: number; gameOver: boolean }) {
         this.scheduleOnce(() => {
             this.sfx.play('bb_block_clear');
-            this.playClearBurstSparkles(result.clearedCells);
+            this.playPlacementConfetti(result.clearedCells);
             this.updateView();
             if (result.gameOver) this.showGameOver();
         }, 0.12);
