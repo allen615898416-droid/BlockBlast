@@ -16,3 +16,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.creator/
+
+# Local preview / automation artifacts
+.playwright-cli/
+
+# Imported source duplicates (canonical copies live under assets/resources)
+/图片.png
+/皇冠.png
+/设置.png

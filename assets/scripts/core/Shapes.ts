@@ -2,65 +2,62 @@
 
 import { Shape, ShapeCell } from './Types';
 
-// 所有形状定义 (1=填充, 0=空)
-const SHAPE_MATRIX: number[][][] = [
-    // 单块
-    [[1]],
+interface ShapeCategory {
+    color: number;
+    matrices: number[][][];
+}
 
-    // 两块
-    [[1, 1]],
-    [[1], [1]],
-
-    // 三块直线
-    [[1, 1, 1]],
-    [[1], [1], [1]],
-
-    // 四块直线
-    [[1, 1, 1, 1]],
-    [[1], [1], [1], [1]],
-
-    // 五块直线
-    [[1, 1, 1, 1, 1]],
-    [[1], [1], [1], [1], [1]],
-
-    // 2x2 方块
-    [[1, 1], [1, 1]],
-
-    // 3x3 方块
-    [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
-
-    // 小L (3块, 4方向)
-    [[1, 0], [1, 1]],
-    [[1, 1], [0, 1]],
-    [[0, 1], [1, 1]],
-    [[1, 1], [1, 0]],
-
-    // 大L (4块, 4方向)
-    [[1, 0], [1, 0], [1, 1]],
-    [[1, 1, 1], [1, 0, 0]],
-    [[1, 1], [0, 1], [0, 1]],
-    [[0, 0, 1], [1, 1, 1]],
-
-    // T形 (4块, 4方向)
-    [[1, 1, 1], [0, 1, 0]],
-    [[0, 1, 0], [1, 1, 1]],
-    [[1, 0], [1, 1], [1, 0]],
-    [[0, 1], [1, 1], [0, 1]],
-
-    // S/Z形 (4块, 4方向)
-    [[0, 1, 1], [1, 1, 0]],
-    [[1, 1, 0], [0, 1, 1]],
-    [[1, 0], [1, 1], [0, 1]],
-    [[0, 1], [1, 1], [1, 0]],
-
-    // 超大L (5块, 4方向)
-    [[1, 0], [1, 0], [1, 0], [1, 1]],
-    [[1, 1, 1, 1], [1, 0, 0, 0]],
-    [[1, 1], [0, 1], [0, 1], [0, 1]],
-    [[0, 0, 0, 1], [1, 1, 1, 1]],
+// 候选方块：分别由 1/3/5/6/7/9 个块构成，颜色由类别固定
+const SHAPE_CATEGORIES: ShapeCategory[] = [
+    {
+        // 1块：红色
+        color: 0,
+        matrices: [
+            [[1]],
+        ],
+    },
+    {
+        // 3块：蓝色，当前先保留原有6种
+        color: 1,
+        matrices: [
+            [[1, 1, 1]],
+            [[1], [1], [1]],
+            [[1, 0], [1, 1]],
+            [[0, 1], [1, 1]],
+            [[1, 1], [1, 0]],
+            [[1, 1], [0, 1]],
+        ],
+    },
+    {
+        // 5块：绿色，只保留5-7十字
+        color: 2,
+        matrices: [
+            [[0, 1, 0], [1, 1, 1], [0, 1, 0]],
+        ],
+    },
+    {
+        // 6块：紫色，横3纵2
+        color: 3,
+        matrices: [
+            [[1, 1, 1], [1, 1, 1]],
+        ],
+    },
+    {
+        // 7块：黄色，基于6块在中间列向上/向下加一格
+        color: 4,
+        matrices: [
+            [[0, 1, 0], [1, 1, 1], [1, 1, 1]],
+            [[1, 1, 1], [1, 1, 1], [0, 1, 0]],
+        ],
+    },
+    {
+        // 9块：紫色，只保留3x3
+        color: 3,
+        matrices: [
+            [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+        ],
+    },
 ];
-
-const COLOR_COUNT = 8;
 
 export function matrixToShape(matrix: number[][], color: number): Shape {
     const cells: ShapeCell[] = [];
@@ -84,9 +81,9 @@ export function matrixToShape(matrix: number[][], color: number): Shape {
 }
 
 export function getRandomShape(): Shape {
-    const matrix = SHAPE_MATRIX[Math.floor(Math.random() * SHAPE_MATRIX.length)];
-    const color = Math.floor(Math.random() * COLOR_COUNT);
-    return matrixToShape(matrix, color);
+    const category = SHAPE_CATEGORIES[Math.floor(Math.random() * SHAPE_CATEGORIES.length)];
+    const matrix = category.matrices[Math.floor(Math.random() * category.matrices.length)];
+    return matrixToShape(matrix, category.color);
 }
 
 export function getTrayShapes(count: number): Shape[] {
