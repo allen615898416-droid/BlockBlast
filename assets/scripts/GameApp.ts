@@ -213,6 +213,7 @@ export class GameApp extends Component {
         this.createDragNode();
         this.createEffectLayer();
         this.createGameOverNode();
+        this.createVersionLabel();
         this.loadCellFrames();
         this.loadVfxFrames();
 
@@ -517,6 +518,20 @@ export class GameApp extends Component {
         this.gameOverNode.active = false;
     }
 
+    private createVersionLabel() {
+        const { node } = this.getOrCreateChild(this.node, 'VersionLabel');
+        const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+        transform.setContentSize(120, 20);
+        node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
+        let label = node.getComponent(Label);
+        if (!label) label = node.addComponent(Label);
+        label.string = 'v1.1.0';
+        label.fontSize = 12;
+        label.lineHeight = 14;
+        label.color = new Color(255, 255, 255, 80);
+        label.overflow = Label.Overflow.NONE;
+    }
+
     // ========== 渲染 ==========
 
     private updateView() {
@@ -583,7 +598,7 @@ export class GameApp extends Component {
         }
 
         // 格线：加深加实，远距离也能看清棋盘分隔。
-        g.strokeColor = new Color(14, 22, 54, 220);
+        g.strokeColor = new Color(5, 10, 30, 255);
         g.lineWidth = 1;
         for (let col = 1; col < GRID_COLS; col++) {
             const x = -gridWidth / 2 + col * CELL_SIZE;
@@ -1115,7 +1130,7 @@ export class GameApp extends Component {
                     } else {
                         this.scheduleOnce(() => {
                             this.updateView();
-                            if (result.gameOver) this.showGameOver();
+                            if (result.gameOver) this.scheduleOnce(() => this.showGameOver(), 0.35);
                         }, 0.05);
                     }
                 }
@@ -1158,7 +1173,7 @@ export class GameApp extends Component {
             this.sfx.play('bb_block_clear');
             this.playPlacementConfetti(result.clearedCells);
             this.updateView();
-            if (result.gameOver) this.showGameOver();
+            if (result.gameOver) this.scheduleOnce(() => this.showGameOver(), 0.35);
         }, 0.12);
     }
 
@@ -1296,6 +1311,12 @@ export class GameApp extends Component {
         this.gameOverScoreLabel.string = Math.max(0, Math.floor(this.gameLogic.score)).toString();
         this.gameOverBestLabel.string = Math.max(0, Math.floor(this.gameLogic.bestScore)).toString();
         this.gameOverNode.active = true;
+        this.gameOverNode.setScale(0.8, 0.8, 1);
+        const { opacity } = this.gameOverNode;
+        this.gameOverNode.setScale(0.85, 0.85, 1);
+        tween(this.gameOverNode)
+            .to(0.25, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+            .start();
     }
 
     private restart() {
