@@ -12,12 +12,14 @@ const { ccclass, property } = _decorator;
 const DESIGN_WIDTH = 390;
 const DESIGN_HEIGHT = 844;
 
-const CELL_TEXTURE_PATHS = [
+const CELL_TEXTURE_PATHS: Array<string | null> = [
     'blockblast/cell/redcell',
     'blockblast/cell/bluecell',
     'blockblast/cell/greencell',
     'blockblast/cell/purplecell',
     'blockblast/cell/yellowcell',
+    'blockblast/cell/orangecell',
+    null,
 ];
 
 const FONT_PATHS = {
@@ -94,7 +96,7 @@ export class GameApp extends Component {
     @property({ type: Node, tooltip: '编辑器可见的特效层。为空时自动查找 EffectLayer。' })
     public effectRoot: Node | null = null;
 
-    @property({ type: [SpriteFrame], tooltip: 'UI_v4.0/block 五个 cell：红、蓝、绿、紫、黄。为空时走 resources 回退加载。' })
+    @property({ type: [SpriteFrame], tooltip: 'UI_v4.0/block 六个 cell：红、蓝、绿、紫、黄、橙。为空时走 resources 回退加载。' })
     public cellFrameAssets: SpriteFrame[] = [];
 
     @property({ type: Font, tooltip: 'roblock HUD/正文用字重：Alibaba PuHuiTi Medium。为空时走 resources 回退加载。' })
@@ -452,7 +454,7 @@ export class GameApp extends Component {
         if (this.cellFrames.every(frame => frame !== null)) return;
 
         CELL_TEXTURE_PATHS.forEach((path, index) => {
-            if (this.cellFrames[index]) return;
+            if (this.cellFrames[index] || !path) return;
             this.loadSpriteFrame(path, (frame) => {
                 this.cellFrames[index] = frame;
                 this.updateView();
