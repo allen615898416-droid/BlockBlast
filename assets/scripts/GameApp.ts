@@ -13,13 +13,11 @@ const DESIGN_WIDTH = 390;
 const DESIGN_HEIGHT = 844;
 
 const CELL_TEXTURE_PATHS = [
-    'blockblast/cell/redcell',
-    'blockblast/cell/bluecell',
-    'blockblast/cell/greencell',
-    'blockblast/cell/purplecell',
-    'blockblast/cell/yellowcell',
-    'blockblast/cell/orangecell',
-    'blockblast/cell/cyancell',
+    'blockblast/cell/cell_red',
+    'blockblast/cell/cell_blue',
+    'blockblast/cell/cell_green',
+    'blockblast/cell/cell_purple',
+    'blockblast/cell/cell_yellow',
 ];
 
 const FONT_PATHS = {
@@ -163,6 +161,8 @@ export class GameApp extends Component {
     // 游戏结束
     private gameOverNode: Node;
     private gameOverScoreLabel: Label;
+    private gameOverBestLabel: Label;
+    private gameOverRestartButton: Node;
 
     // 移动端竖屏布局（390×844，参考 roblock 项目）
     private GRID_Y = -8;
@@ -303,8 +303,7 @@ export class GameApp extends Component {
     }
 
     private applyAllLabelStyles() {
-        // 顶部 ScoreLabel / BestLabel 完全沿用场景与 Inspector 样式，运行时只更新数字。
-        if (this.gameOverScoreLabel) this.applyLabelStyle(this.gameOverScoreLabel, 'bold', 22, 26, new Color(255, 255, 255, 255), 1, new Color(0, 0, 0, 210));
+        // HUD / GameOver 均沿用场景与 Inspector 样式，运行时只更新数字。
     }
 
     private createBackground() {
@@ -489,38 +488,29 @@ export class GameApp extends Component {
     }
 
     private createGameOverNode() {
-        const rootInfo = this.getOrCreateChild(this.node, 'GameOver');
-        this.gameOverNode = rootInfo.node;
+        const gameOverNode = this.node.getChildByName('GameOver');
+        if (!gameOverNode) {
+            throw new Error('[BlockBlast] Missing editor node: GameOver');
+        }
+
+        this.gameOverNode = gameOverNode;
         this.ensureTransform(this.gameOverNode, DESIGN_WIDTH, DESIGN_HEIGHT);
 
-        const bgInfo = this.getOrCreateChild(this.gameOverNode, 'GOBg');
-        this.ensureTransform(bgInfo.node, DESIGN_WIDTH, DESIGN_HEIGHT);
-        const bg = this.ensureGraphics(bgInfo.node);
-        bg.clear();
-        bg.fillColor = new Color(0, 0, 0, 180);
-        bg.roundRect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT, 0);
-        bg.fill();
+        const scoreLabel = this.gameOverNode.getChildByName('Score')?.getComponent(Label);
+        const bestLabel = this.gameOverNode.getChildByName('Scorebest')?.getComponent(Label);
+        const restartButton = this.gameOverNode.getChildByName('buttonbg');
+        if (!scoreLabel || !bestLabel || !restartButton) {
+            throw new Error('[BlockBlast] Missing GameOver nodes: Score, Scorebest or buttonbg');
+        }
 
-        const labelInfo = this.getOrCreateChild(this.gameOverNode, 'GOLabel');
-        if (labelInfo.created) labelInfo.node.setPosition(0, 54, 0);
-        this.ensureTransform(labelInfo.node, 300, 54);
-        const goLabel = this.ensureLabel(labelInfo.node);
-        goLabel.string = 'Game Over';
-        this.applyLabelStyle(goLabel, 'heavy', 36, 40, new Color(255, 107, 107, 255), 1, new Color(0, 0, 0, 210));
-
-        const scoreInfo = this.getOrCreateChild(this.gameOverNode, 'GOScore');
-        if (scoreInfo.created) scoreInfo.node.setPosition(0, 0, 0);
-        this.ensureTransform(scoreInfo.node, 260, 34);
-        this.gameOverScoreLabel = this.ensureLabel(scoreInfo.node);
-        this.gameOverScoreLabel.string = 'Score: 0';
-        this.applyLabelStyle(this.gameOverScoreLabel, 'bold', 22, 26, new Color(255, 255, 255, 255), 1, new Color(0, 0, 0, 210));
-
-        const restartInfo = this.getOrCreateChild(this.gameOverNode, 'GORestart');
-        if (restartInfo.created) restartInfo.node.setPosition(0, -72, 0);
-        this.ensureTransform(restartInfo.node, 260, 28);
-        const restartLabel = this.ensureLabel(restartInfo.node);
-        restartLabel.string = 'Tap to Restart';
-        this.applyLabelStyle(restartLabel, 'medium', 17, 20, new Color(214, 218, 235, 220));
+        this.gameOverScoreLabel = scoreLabel;
+        this.gameOverBestLabel = bestLabel;
+        this.gameOverRestartButton = restartButton;
+        this.gameOverRestartButton.off(Node.EventType.TOUCH_START);
+        this.gameOverRestartButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            this.restart();
+        }, this);
 
         this.gameOverNode.active = false;
     }
@@ -1045,10 +1035,7 @@ export class GameApp extends Component {
     // ========== 触摸交互 ==========
 
     private onTouchStart(event: EventTouch) {
-        if (this.gameLogic.isGameOver) {
-            this.restart();
-            return;
-        }
+        if (this.gameLogic.isGameOver) return;
 
         const uiPos = event.getUILocation();
         const pos = new Vec3(uiPos.x, uiPos.y, 0);
@@ -1304,7 +1291,8 @@ export class GameApp extends Component {
     // ========== 游戏结束 ==========
 
     private showGameOver() {
-        this.gameOverScoreLabel.string = `Score: ${this.gameLogic.score}`;
+        this.gameOverScoreLabel.string = Math.max(0, Math.floor(this.gameLogic.score)).toString();
+        this.gameOverBestLabel.string = Math.max(0, Math.floor(this.gameLogic.bestScore)).toString();
         this.gameOverNode.active = true;
     }
 

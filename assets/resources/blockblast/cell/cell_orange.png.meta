@@ -2,7 +2,7 @@
   "ver": "1.0.27",
   "importer": "image",
   "imported": true,
-  "uuid": "526d3798-234d-488e-bd95-0b8a6f617c48",
+  "uuid": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9",
   "files": [
     ".json",
     ".png"
@@ -10,8 +10,8 @@
   "subMetas": {
     "6c48a": {
       "importer": "texture",
-      "uuid": "526d3798-234d-488e-bd95-0b8a6f617c48@6c48a",
-      "displayName": "皇冠",
+      "uuid": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9@6c48a",
+      "displayName": "cell_orange",
       "id": "6c48a",
       "name": "texture",
       "userData": {
@@ -22,7 +22,7 @@
         "mipfilter": "none",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "526d3798-234d-488e-bd95-0b8a6f617c48",
+        "imageUuidOrDatabaseUri": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9",
         "visible": false
       },
       "ver": "1.0.22",
@@ -34,8 +34,8 @@
     },
     "f9941": {
       "importer": "sprite-frame",
-      "uuid": "526d3798-234d-488e-bd95-0b8a6f617c48@f9941",
-      "displayName": "皇冠",
+      "uuid": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9@f9941",
+      "displayName": "cell_orange",
       "id": "f9941",
       "name": "spriteFrame",
       "userData": {
@@ -45,10 +45,10 @@
         "offsetY": 0,
         "trimX": 0,
         "trimY": 0,
-        "width": 64,
-        "height": 47,
-        "rawWidth": 64,
-        "rawHeight": 47,
+        "width": 108,
+        "height": 108,
+        "rawWidth": 108,
+        "rawHeight": 108,
         "borderTop": 0,
         "borderBottom": 0,
         "borderLeft": 0,
@@ -60,17 +60,17 @@
         "meshType": 0,
         "vertices": {
           "rawPosition": [
-            -32,
-            -23.5,
+            -54,
+            -54,
             0,
-            32,
-            -23.5,
+            54,
+            -54,
             0,
-            -32,
-            23.5,
+            -54,
+            54,
             0,
-            32,
-            23.5,
+            54,
+            54,
             0
           ],
           "indexes": [
@@ -83,12 +83,12 @@
           ],
           "uv": [
             0,
-            47,
-            64,
-            47,
+            108,
+            108,
+            108,
             0,
             0,
-            64,
+            108,
             0
           ],
           "nuv": [
@@ -102,18 +102,18 @@
             1
           ],
           "minPos": [
-            -32,
-            -23.5,
+            -54,
+            -54,
             0
           ],
           "maxPos": [
-            32,
-            23.5,
+            54,
+            54,
             0
           ]
         },
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "526d3798-234d-488e-bd95-0b8a6f617c48@6c48a",
+        "imageUuidOrDatabaseUri": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9@6c48a",
         "atlasUuid": "",
         "trimType": "auto"
       },
@@ -129,7 +129,7 @@
     "type": "sprite-frame",
     "fixAlphaTransparencyArtifacts": false,
     "hasAlpha": true,
-    "redirect": "526d3798-234d-488e-bd95-0b8a6f617c48@6c48a",
+    "redirect": "dbd1fc7e-0c1d-4075-b778-1b107c8445e9@6c48a",
     "platformSettings": {
       "android": {
         "formats": [

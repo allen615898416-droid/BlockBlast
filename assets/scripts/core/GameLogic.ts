@@ -1,7 +1,7 @@
 // Block Blast - 游戏逻辑控制
 
 import { Grid } from './Grid';
-import { getTrayShapes } from './Shapes';
+import { getInitialTrayShapes, getTrayShapes } from './Shapes';
 import {
     CLEAR_BASE_SCORE_PER_CELL,
     CLEAR_EXTRA_LINE_BONUS_PER_CELL,
@@ -23,7 +23,7 @@ export class GameLogic {
         this.bestScore = 0;
         this.isGameOver = false;
         this.tray = [];
-        this.refillTray();
+        this.tray = getInitialTrayShapes(TRAY_COUNT);
     }
 
     public placeShape(trayIndex: number, row: number, col: number): PlacementResult {
@@ -75,7 +75,7 @@ export class GameLogic {
             this.refillTray();
         }
 
-        // 无尽模式只检查游戏结束，不再按目标分结算关卡。
+        // 无尽模式：没有过关目标，只在所有候选块都无法放置时结束。
         const gameOver = this.checkGameOver();
 
         return { success: true, linesCleared: totalLines, scoreGained, gameOver, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
@@ -97,7 +97,7 @@ export class GameLogic {
     }
 
     public restart(): void {
-        // 无尽模式重开一局，分数清零，最高分保留。
+        // 无尽模式重新挑战：清空棋盘和本次分数，保留历史最高分。
         this.grid.clear();
         this.score = 0;
         this.isGameOver = false;
