@@ -27,7 +27,6 @@ export interface PlacementResult {
     linesCleared: number;
     scoreGained: number;
     gameOver: boolean;
-    levelComplete: boolean;
     placedCells: GridPosition[];
     clearedCells: GridPosition[];
     clearedRows: number[];

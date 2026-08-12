@@ -12,14 +12,14 @@ const { ccclass, property } = _decorator;
 const DESIGN_WIDTH = 390;
 const DESIGN_HEIGHT = 844;
 
-const CELL_TEXTURE_PATHS: Array<string | null> = [
+const CELL_TEXTURE_PATHS = [
     'blockblast/cell/redcell',
     'blockblast/cell/bluecell',
     'blockblast/cell/greencell',
     'blockblast/cell/purplecell',
     'blockblast/cell/yellowcell',
     'blockblast/cell/orangecell',
-    null,
+    'blockblast/cell/cyancell',
 ];
 
 const FONT_PATHS = {
@@ -96,7 +96,7 @@ export class GameApp extends Component {
     @property({ type: Node, tooltip: '编辑器可见的特效层。为空时自动查找 EffectLayer。' })
     public effectRoot: Node | null = null;
 
-    @property({ type: [SpriteFrame], tooltip: 'UI_v4.0/block 六个 cell：红、蓝、绿、紫、黄、橙。为空时走 resources 回退加载。' })
+    @property({ type: [SpriteFrame], tooltip: '七个 cell：红、蓝、绿、紫、黄、橙、青，分别对应 1/3/5/6/7/4/9 格；为空时走 resources 加载。' })
     public cellFrameAssets: SpriteFrame[] = [];
 
     @property({ type: Font, tooltip: 'roblock HUD/正文用字重：Alibaba PuHuiTi Medium。为空时走 resources 回退加载。' })
@@ -159,16 +159,10 @@ export class GameApp extends Component {
     // 分数
     private scoreLabel: Label;
     private bestLabel: Label;
-    private levelLabel: Label;
-    private targetLabel: Label;
 
     // 游戏结束
     private gameOverNode: Node;
     private gameOverScoreLabel: Label;
-
-    // 关卡完成
-    private levelCompleteNode: Node;
-    private levelCompleteSubLabel: Label;
 
     // 移动端竖屏布局（390×844，参考 roblock 项目）
     private GRID_Y = -8;
@@ -203,8 +197,7 @@ export class GameApp extends Component {
         const transform = this.node.getComponent(UITransform) || this.node.addComponent(UITransform);
         transform.setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
 
-        const startLevel = parseInt(sys.localStorage.getItem('block_blast_level') || '1', 10);
-        this.gameLogic = new GameLogic(startLevel);
+        this.gameLogic = new GameLogic();
         this.gameLogic.bestScore = parseInt(sys.localStorage.getItem('block_blast_best') || '0', 10);
         this.sfx = new SfxService(this.node);
         this.initializeFonts();
@@ -218,7 +211,6 @@ export class GameApp extends Component {
         this.createDragNode();
         this.createEffectLayer();
         this.createGameOverNode();
-        this.createLevelCompleteNode();
         this.loadCellFrames();
         this.loadVfxFrames();
 
@@ -313,7 +305,6 @@ export class GameApp extends Component {
     private applyAllLabelStyles() {
         // 顶部 ScoreLabel / BestLabel 完全沿用场景与 Inspector 样式，运行时只更新数字。
         if (this.gameOverScoreLabel) this.applyLabelStyle(this.gameOverScoreLabel, 'bold', 22, 26, new Color(255, 255, 255, 255), 1, new Color(0, 0, 0, 210));
-        if (this.levelCompleteSubLabel) this.applyLabelStyle(this.levelCompleteSubLabel, 'bold', 20, 24, new Color(255, 255, 255, 255), 1, new Color(0, 0, 0, 210));
     }
 
     private createBackground() {
@@ -534,43 +525,6 @@ export class GameApp extends Component {
         this.gameOverNode.active = false;
     }
 
-    private createLevelCompleteNode() {
-        const rootInfo = this.getOrCreateChild(this.node, 'LevelComplete');
-        this.levelCompleteNode = rootInfo.node;
-        this.ensureTransform(this.levelCompleteNode, DESIGN_WIDTH, DESIGN_HEIGHT);
-
-        const bgInfo = this.getOrCreateChild(this.levelCompleteNode, 'LCBg');
-        this.ensureTransform(bgInfo.node, DESIGN_WIDTH, DESIGN_HEIGHT);
-        const bg = this.ensureGraphics(bgInfo.node);
-        bg.clear();
-        bg.fillColor = new Color(0, 0, 0, 180);
-        bg.roundRect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT, 0);
-        bg.fill();
-
-        const labelInfo = this.getOrCreateChild(this.levelCompleteNode, 'LCLabel');
-        if (labelInfo.created) labelInfo.node.setPosition(0, 54, 0);
-        this.ensureTransform(labelInfo.node, 320, 54);
-        const lcLabel = this.ensureLabel(labelInfo.node);
-        lcLabel.string = 'Level Complete!';
-        this.applyLabelStyle(lcLabel, 'heavy', 32, 38, new Color(107, 203, 119, 255), 1, new Color(0, 0, 0, 210));
-
-        const subInfo = this.getOrCreateChild(this.levelCompleteNode, 'LCSub');
-        if (subInfo.created) subInfo.node.setPosition(0, 0, 0);
-        this.ensureTransform(subInfo.node, 260, 34);
-        this.levelCompleteSubLabel = this.ensureLabel(subInfo.node);
-        this.levelCompleteSubLabel.string = 'Level 1';
-        this.applyLabelStyle(this.levelCompleteSubLabel, 'bold', 20, 24, new Color(255, 255, 255, 255), 1, new Color(0, 0, 0, 210));
-
-        const nextInfo = this.getOrCreateChild(this.levelCompleteNode, 'LCNext');
-        if (nextInfo.created) nextInfo.node.setPosition(0, -72, 0);
-        this.ensureTransform(nextInfo.node, 260, 28);
-        const nextLabel = this.ensureLabel(nextInfo.node);
-        nextLabel.string = 'Tap to Next';
-        this.applyLabelStyle(nextLabel, 'medium', 17, 20, new Color(214, 218, 235, 220));
-
-        this.levelCompleteNode.active = false;
-    }
-
     // ========== 渲染 ==========
 
     private updateView() {
@@ -768,18 +722,10 @@ export class GameApp extends Component {
         const shape = this.gameLogic.tray[this.dragShapeIndex];
         if (!shape) return;
 
-        // shape 视觉中心 (cells 平均)
-        let sumRow = 0, sumCol = 0;
-        for (const cell of shape.cells) {
-            sumRow += cell.row;
-            sumCol += cell.col;
-        }
-        const avgRow = sumRow / shape.cells.length;
-        const avgCol = sumCol / shape.cells.length;
-
         // offsetX/offsetY 让 shape 视觉中心精确对齐到 dragNode 节点中心（不对称形状也成立）
-        const offsetX = -avgCol * CELL_SIZE;
-        const offsetY = avgRow * CELL_SIZE;
+        const shapeCenter = this.getShapeVisualCenter(shape);
+        const offsetX = -shapeCenter.col * CELL_SIZE;
+        const offsetY = shapeCenter.row * CELL_SIZE;
 
         // 拖拽实体始终跟随手指偏移位置；棋盘落点由 GridPreview 单独吸附，避免实体吸附后看起来“消失”。
         const adjustedPos = this.getAdjustedDragPos(touchPos);
@@ -805,8 +751,8 @@ export class GameApp extends Component {
         if (!shape) return;
 
         const adjustedPos = this.getAdjustedDragPos(touchPos);
-        const cellPos = this.getGridCellFromTouch(adjustedPos);
-        if (!cellPos) {
+        const placement = this.getShapePlacementFromTouch(adjustedPos, shape);
+        if (!placement) {
             this.lastPreviewCode = null;
             if (this.lastClearPreviewKey) this.clearHighlightEffects();
             this.lastClearPreviewKey = '';
@@ -814,9 +760,7 @@ export class GameApp extends Component {
             return;
         }
 
-        const placeRow = cellPos.row - Math.floor((shape.height - 1) / 2);
-        const placeCol = cellPos.col - Math.floor((shape.width - 1) / 2);
-
+        const { row: placeRow, col: placeCol } = placement;
         const canPlace = this.gameLogic.grid.canPlace(shape, placeRow, placeCol);
         this.lastPreviewPlacement = { row: placeRow, col: placeCol, canPlace };
         const previewCode = canPlace ? 'valid' : 'invalid';
@@ -1101,10 +1045,6 @@ export class GameApp extends Component {
     // ========== 触摸交互 ==========
 
     private onTouchStart(event: EventTouch) {
-        if (this.gameLogic.isLevelComplete) {
-            this.nextLevel();
-            return;
-        }
         if (this.gameLogic.isGameOver) {
             this.restart();
             return;
@@ -1184,12 +1124,10 @@ export class GameApp extends Component {
                     if (result.linesCleared > 0) {
                         this.scheduleClearSequence(result);
                     } else {
-                        this.scheduleOnce(() => this.updateView(), 0.05);
-                        if (result.levelComplete) {
-                            this.showLevelComplete();
-                        } else if (result.gameOver) {
-                            this.showGameOver();
-                        }
+                        this.scheduleOnce(() => {
+                            this.updateView();
+                            if (result.gameOver) this.showGameOver();
+                        }, 0.05);
                     }
                 }
             }
@@ -1226,28 +1164,40 @@ export class GameApp extends Component {
         this.gridPreview.clear();
     }
 
-    private scheduleClearSequence(result: { clearedCells: GridPosition[]; linesCleared: number; levelComplete: boolean; gameOver: boolean }) {
+    private scheduleClearSequence(result: { clearedCells: GridPosition[]; linesCleared: number; gameOver: boolean }) {
         this.scheduleOnce(() => {
             this.sfx.play('bb_block_clear');
             this.playClearBurstSparkles(result.clearedCells);
             this.updateView();
-            if (result.levelComplete) {
-                this.showLevelComplete();
-            } else if (result.gameOver) {
-                this.showGameOver();
-            }
+            if (result.gameOver) this.showGameOver();
         }, 0.12);
     }
 
-    private getGridCellFromTouch(touchPos: Vec3): { row: number; col: number } | null {
+    private getShapeVisualCenter(shape: Shape): { row: number; col: number } {
+        let sumRow = 0;
+        let sumCol = 0;
+        for (const cell of shape.cells) {
+            sumRow += cell.row;
+            sumCol += cell.col;
+        }
+        return {
+            row: sumRow / shape.cells.length,
+            col: sumCol / shape.cells.length,
+        };
+    }
+
+    private getShapePlacementFromTouch(touchPos: Vec3, shape: Shape): { row: number; col: number } | null {
         const gridTransform = this.gridNode.getComponent(UITransform);
         const localPos = gridTransform.convertToNodeSpaceAR(touchPos);
+        const halfW = GRID_COLS * CELL_SIZE / 2;
+        const halfH = GRID_ROWS * CELL_SIZE / 2;
+        if (localPos.x < -halfW || localPos.x > halfW || localPos.y < -halfH || localPos.y > halfH) return null;
 
-        const col = Math.floor((localPos.x + GRID_COLS / 2 * CELL_SIZE) / CELL_SIZE);
-        const row = Math.floor((GRID_ROWS / 2 * CELL_SIZE - localPos.y) / CELL_SIZE);
-
-        if (row < 0 || row >= GRID_ROWS || col < 0 || col >= GRID_COLS) return null;
-        return { row, col };
+        const center = this.getShapeVisualCenter(shape);
+        return {
+            row: Math.round(GRID_ROWS / 2 - 0.5 - center.row - localPos.y / CELL_SIZE),
+            col: Math.round(localPos.x / CELL_SIZE + GRID_COLS / 2 - 0.5 - center.col),
+        };
     }
 
     private gridCellToLocalPosition(cell: GridPosition): Vec3 {
@@ -1354,22 +1304,8 @@ export class GameApp extends Component {
     // ========== 游戏结束 ==========
 
     private showGameOver() {
-        this.gameOverScoreLabel.string = `Level ${this.gameLogic.level}  Score: ${this.gameLogic.score}`;
+        this.gameOverScoreLabel.string = `Score: ${this.gameLogic.score}`;
         this.gameOverNode.active = true;
-    }
-
-    private showLevelComplete() {
-        this.sfx.play('bb_block_start');
-        this.levelCompleteSubLabel.string = `Level ${this.gameLogic.level}`;
-        this.levelCompleteNode.active = true;
-    }
-
-    private nextLevel() {
-        this.sfx.play('ui_tap');
-        this.gameLogic.nextLevel();
-        sys.localStorage.setItem('block_blast_level', this.gameLogic.level.toString());
-        this.levelCompleteNode.active = false;
-        this.updateView();
     }
 
     private restart() {

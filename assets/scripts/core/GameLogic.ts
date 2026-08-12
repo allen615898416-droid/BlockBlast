@@ -5,7 +5,6 @@ import { getTrayShapes } from './Shapes';
 import {
     CLEAR_BASE_SCORE_PER_CELL,
     CLEAR_EXTRA_LINE_BONUS_PER_CELL,
-    LEVEL_TARGETS,
     SCORE_PER_PLACED_CELL,
     TRAY_COUNT,
 } from './Constants';
@@ -17,22 +16,14 @@ export class GameLogic {
     public score: number;
     public bestScore: number;
     public isGameOver: boolean;
-    public level: number;
-    public isLevelComplete: boolean;
 
-    constructor(startLevel: number = 1) {
+    constructor() {
         this.grid = new Grid();
         this.score = 0;
         this.bestScore = 0;
         this.isGameOver = false;
-        this.level = (startLevel >= 1 && startLevel <= LEVEL_TARGETS.length) ? startLevel : 1;
-        this.isLevelComplete = false;
         this.tray = [];
         this.refillTray();
-    }
-
-    get targetScore(): number {
-        return LEVEL_TARGETS[Math.min(this.level - 1, LEVEL_TARGETS.length - 1)];
     }
 
     public placeShape(trayIndex: number, row: number, col: number): PlacementResult {
@@ -41,14 +32,13 @@ export class GameLogic {
             linesCleared: 0,
             scoreGained: 0,
             gameOver: false,
-            levelComplete: false,
             placedCells: [],
             clearedCells: [],
             clearedRows: [],
             clearedCols: [],
         };
 
-        if (this.isGameOver || this.isLevelComplete || trayIndex < 0 || trayIndex >= this.tray.length) return fail;
+        if (this.isGameOver || trayIndex < 0 || trayIndex >= this.tray.length) return fail;
 
         const shape = this.tray[trayIndex];
         if (!shape || !this.grid.canPlace(shape, row, col)) return fail;
@@ -85,16 +75,10 @@ export class GameLogic {
             this.refillTray();
         }
 
-        // 关卡完成检查（优先于游戏结束判定，过关即结束本关）
-        if (this.score >= this.targetScore) {
-            this.isLevelComplete = true;
-            return { success: true, linesCleared: totalLines, scoreGained, gameOver: false, levelComplete: true, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
-        }
-
-        // 检查游戏结束
+        // 无尽模式只检查游戏结束，不再按目标分结算关卡。
         const gameOver = this.checkGameOver();
 
-        return { success: true, linesCleared: totalLines, scoreGained, gameOver, levelComplete: false, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
+        return { success: true, linesCleared: totalLines, scoreGained, gameOver, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
     }
 
     public refillTray(): void {
@@ -112,24 +96,11 @@ export class GameLogic {
         return true;
     }
 
-    public nextLevel(): void {
-        // 通关最后一关后保持在最后一关继续挑战（目标分不变，可反复游玩）
-        if (this.level < LEVEL_TARGETS.length) {
-            this.level++;
-        }
-        this.grid.clear();
-        this.score = 0;
-        this.isGameOver = false;
-        this.isLevelComplete = false;
-        this.refillTray();
-    }
-
     public restart(): void {
-        // 重玩本关（保留关卡进度，不回第1关）
+        // 无尽模式重开一局，分数清零，最高分保留。
         this.grid.clear();
         this.score = 0;
         this.isGameOver = false;
-        this.isLevelComplete = false;
         this.refillTray();
     }
 }
