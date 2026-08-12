@@ -10,7 +10,7 @@ interface WeightedShapeDefinition {
 }
 
 // 颜色索引：0红、1蓝、2绿、3紫、4黄、5橙、6青。-1 表示随机颜色。
-// 概率：1格 5%、3格 10%、4格 70%、5格 6%、6格 3%、7格 3%、9格 3%。
+// 概率：1格 5%、3格 10%、4格 71%、5格 4%、6格 4%、7格 3%、9格 3%。
 const SHAPE_POOL: WeightedShapeDefinition[] = [
     { id: 'i1', color: 0, weight: 5, matrix: [[1]] },
 
@@ -21,33 +21,33 @@ const SHAPE_POOL: WeightedShapeDefinition[] = [
     { id: 'l3c', color: 1, weight: 1.5, matrix: [[1, 0], [1, 1]] },
     { id: 'l3d', color: 1, weight: 1.5, matrix: [[0, 1], [1, 1]] },
 
-    { id: 'i4h', color: -1, weight: 3.11, matrix: [[1, 1, 1, 1]] },
-    { id: 'i4v', color: -1, weight: 3.11, matrix: [[1], [1], [1], [1]] },
-    { id: 'o4', color: -1, weight: 14, matrix: [[1, 1], [1, 1]] },
-    { id: 't4u', color: -1, weight: 3.11, matrix: [[1, 1, 1], [0, 1, 0]] },
-    { id: 't4d', color: -1, weight: 3.11, matrix: [[0, 1, 0], [1, 1, 1]] },
-    { id: 't4l', color: -1, weight: 3.11, matrix: [[1, 0], [1, 1], [1, 0]] },
-    { id: 't4r', color: -1, weight: 3.11, matrix: [[0, 1], [1, 1], [0, 1]] },
-    { id: 'l4a', color: -1, weight: 3.11, matrix: [[1, 0], [1, 0], [1, 1]] },
-    { id: 'l4b', color: -1, weight: 3.11, matrix: [[1, 1, 1], [1, 0, 0]] },
-    { id: 'l4c', color: -1, weight: 3.11, matrix: [[1, 1], [0, 1], [0, 1]] },
-    { id: 'l4d', color: -1, weight: 3.11, matrix: [[0, 0, 1], [1, 1, 1]] },
-    { id: 'j4a', color: -1, weight: 3.11, matrix: [[0, 1], [0, 1], [1, 1]] },
-    { id: 'j4b', color: -1, weight: 3.11, matrix: [[1, 0, 0], [1, 1, 1]] },
-    { id: 'j4c', color: -1, weight: 3.11, matrix: [[1, 1], [1, 0], [1, 0]] },
-    { id: 'j4d', color: -1, weight: 3.11, matrix: [[1, 1, 1], [0, 0, 1]] },
-    { id: 's4h', color: -1, weight: 3.11, matrix: [[0, 1, 1], [1, 1, 0]] },
-    { id: 's4v', color: -1, weight: 3.11, matrix: [[1, 0], [1, 1], [0, 1]] },
-    { id: 'z4h', color: -1, weight: 3.11, matrix: [[1, 1, 0], [0, 1, 1]] },
-    { id: 'z4v', color: -1, weight: 3.11, matrix: [[0, 1], [1, 1], [1, 0]] },
+    { id: 'i4h', color: -1, weight: 3.74, matrix: [[1, 1, 1, 1]] },
+    { id: 'i4v', color: -1, weight: 3.74, matrix: [[1], [1], [1], [1]] },
+    { id: 'o4', color: -1, weight: 3.74, matrix: [[1, 1], [1, 1]] },
+    { id: 't4u', color: -1, weight: 3.74, matrix: [[1, 1, 1], [0, 1, 0]] },
+    { id: 't4d', color: -1, weight: 3.74, matrix: [[0, 1, 0], [1, 1, 1]] },
+    { id: 't4l', color: -1, weight: 3.74, matrix: [[1, 0], [1, 1], [1, 0]] },
+    { id: 't4r', color: -1, weight: 3.74, matrix: [[0, 1], [1, 1], [0, 1]] },
+    { id: 'l4a', color: -1, weight: 3.74, matrix: [[1, 0], [1, 0], [1, 1]] },
+    { id: 'l4b', color: -1, weight: 3.74, matrix: [[1, 1, 1], [1, 0, 0]] },
+    { id: 'l4c', color: -1, weight: 3.74, matrix: [[1, 1], [0, 1], [0, 1]] },
+    { id: 'l4d', color: -1, weight: 3.74, matrix: [[0, 0, 1], [1, 1, 1]] },
+    { id: 'j4a', color: -1, weight: 3.74, matrix: [[0, 1], [0, 1], [1, 1]] },
+    { id: 'j4b', color: -1, weight: 3.74, matrix: [[1, 0, 0], [1, 1, 1]] },
+    { id: 'j4c', color: -1, weight: 3.74, matrix: [[1, 1], [1, 0], [1, 0]] },
+    { id: 'j4d', color: -1, weight: 3.74, matrix: [[1, 1, 1], [0, 0, 1]] },
+    { id: 's4h', color: -1, weight: 3.74, matrix: [[0, 1, 1], [1, 1, 0]] },
+    { id: 's4v', color: -1, weight: 3.74, matrix: [[1, 0], [1, 1], [0, 1]] },
+    { id: 'z4h', color: -1, weight: 3.74, matrix: [[1, 1, 0], [0, 1, 1]] },
+    { id: 'z4v', color: -1, weight: 3.74, matrix: [[0, 1], [1, 1], [1, 0]] },
 
-    { id: 'u5a', color: 2, weight: 1.5, matrix: [[1, 0, 1], [1, 1, 1]] },
-    { id: 'u5b', color: 2, weight: 1.5, matrix: [[1, 1, 1], [1, 0, 1]] },
-    { id: 'u5c', color: 2, weight: 1.5, matrix: [[1, 1], [0, 1], [1, 1]] },
-    { id: 'u5d', color: 2, weight: 1.5, matrix: [[1, 1], [1, 0], [1, 1]] },
+    { id: 'u5a', color: 2, weight: 1, matrix: [[1, 0, 1], [1, 1, 1]] },
+    { id: 'u5b', color: 2, weight: 1, matrix: [[1, 1, 1], [1, 0, 1]] },
+    { id: 'u5c', color: 2, weight: 1, matrix: [[1, 1], [0, 1], [1, 1]] },
+    { id: 'u5d', color: 2, weight: 1, matrix: [[1, 1], [1, 0], [1, 1]] },
 
-    { id: 'rect6h', color: 3, weight: 1.5, matrix: [[1, 1, 1], [1, 1, 1]] },
-    { id: 'rect6v', color: 3, weight: 1.5, matrix: [[1, 1], [1, 1], [1, 1]] },
+    { id: 'rect6h', color: 3, weight: 2, matrix: [[1, 1, 1], [1, 1, 1]] },
+    { id: 'rect6v', color: 3, weight: 2, matrix: [[1, 1], [1, 1], [1, 1]] },
 
     { id: 'cap7a', color: 4, weight: 0.75, matrix: [[0, 1, 0], [1, 1, 1], [1, 1, 1]] },
     { id: 'cap7b', color: 4, weight: 0.75, matrix: [[1, 1, 0], [1, 1, 1], [1, 1, 0]] },
@@ -102,6 +102,46 @@ export function getTrayShapes(count: number): Shape[] {
     const shapes: Shape[] = [];
     for (let i = 0; i < count; i++) {
         shapes.push(getRandomShape());
+    }
+    return shapes;
+}
+
+// ========== DDA 动态难度调整 ==========
+
+export interface DDAMultipliers {
+    small: number;   // 1/3格倍率
+    medium: number;  // 4/5格倍率
+    large: number;   // 6/7/9格倍率
+    line: number;    // 直线块额外倍率
+}
+
+const LINE_IDS = new Set(['i3h', 'i3v', 'i4h', 'i4v']);
+
+function getCellCount(matrix: number[][]): number {
+    let count = 0;
+    for (const row of matrix) for (const v of row) if (v === 1) count++;
+    return count;
+}
+
+export function getTrayShapesWithDDA(count: number, m: DDAMultipliers): Shape[] {
+    const pool = SHAPE_POOL.map(s => {
+        const cells = getCellCount(s.matrix);
+        let mult = cells <= 3 ? m.small : cells <= 5 ? m.medium : m.large;
+        if (LINE_IDS.has(s.id)) mult *= m.line;
+        return { def: s, weight: s.weight * mult };
+    });
+    const total = pool.reduce((sum, p) => sum + p.weight, 0);
+    const shapes: Shape[] = [];
+    for (let i = 0; i < count; i++) {
+        let roll = Math.random() * total;
+        for (const p of pool) {
+            roll -= p.weight;
+            if (roll < 0) {
+                const color = p.def.color < 0 ? Math.floor(Math.random() * 7) : p.def.color;
+                shapes.push(matrixToShape(p.def.matrix, color));
+                break;
+            }
+        }
     }
     return shapes;
 }

@@ -6,6 +6,9 @@ interface NavigatorVibrate {
     vibrate?: (pattern: number | number[]) => boolean;
 }
 
+const ANDROID_HAPTICS_CLASS = 'com/cocos/game/HapticsBridge';
+const SIG_STRING = '(Ljava/lang/String;)V';
+
 function isAndroidNative(): boolean {
     return sys.isNative && sys.os === sys.OS.ANDROID;
 }
@@ -33,8 +36,7 @@ class HapticsServiceClass {
 
     private vibratePredefined(effect: PredefinedEffect): void {
         if (isAndroidNative()) {
-            // Cocos 3.8.8 使用 native.bridge.sendToNative 而非 native.reflection.callStaticMethod
-            native.bridge.sendToNative('haptic_predefined', effect);
+            this.callAndroid('vibratePredefined', effect);
             return;
         }
         if (sys.isBrowser) this.vibrateWeb(effect === 'DOUBLE_CLICK' ? [15, 35, 15] : 15);
@@ -42,10 +44,18 @@ class HapticsServiceClass {
 
     private vibrateWaveform(timings: number[], amplitudes?: number[]): void {
         if (isAndroidNative()) {
-            native.bridge.sendToNative('haptic_waveform', JSON.stringify({ t: timings, a: amplitudes ?? null, r: -1 }));
+            this.callAndroid('vibrateWaveform', JSON.stringify({ t: timings, a: amplitudes ?? null, r: -1 }));
             return;
         }
         if (sys.isBrowser) this.vibrateWeb(timings);
+    }
+
+    private callAndroid(method: string, arg: string): void {
+        try {
+            native.reflection.callStaticMethod(ANDROID_HAPTICS_CLASS, method, SIG_STRING, arg);
+        } catch {
+            // 原生桥接失败不应影响游戏流程。
+        }
     }
 
     private vibrateWeb(pattern: number | number[]): void {

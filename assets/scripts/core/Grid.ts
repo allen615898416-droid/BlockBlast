@@ -130,7 +130,29 @@ export class Grid {
         return false;
     }
 
+    /** 检查某个形状放在棋盘任意位置能否触发消除 */
+    public canClearAnywhere(shape: Shape): boolean {
+        for (let r = 0; r < GRID_ROWS; r++) {
+            for (let c = 0; c < GRID_COLS; c++) {
+                if (this.canPlace(shape, r, c)) {
+                    const result = this.checkLinesWithShape(shape, r, c);
+                    if (result.rows.length > 0 || result.cols.length > 0) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public clear(): void {
         this.cells.fill(0);
+    }
+
+    /** 返回棋盘填充率 0~1 */
+    public getFillRate(): number {
+        let filled = 0;
+        for (let i = 0; i < this.cells.length; i++) {
+            if (this.cells[i] !== 0) filled++;
+        }
+        return filled / this.cells.length;
     }
 }

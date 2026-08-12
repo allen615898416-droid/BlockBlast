@@ -1,7 +1,7 @@
 // Block Blast - 游戏逻辑控制
 
 import { Grid } from './Grid';
-import { getInitialTrayShapes, getTrayShapes } from './Shapes';
+import { getInitialTrayShapes, getTrayShapes, getTrayShapesWithDDA, DDAMultipliers } from './Shapes';
 import {
     CLEAR_BASE_SCORE_PER_CELL,
     CLEAR_EXTRA_LINE_BONUS_PER_CELL,
@@ -16,6 +16,12 @@ export class GameLogic {
     public score: number;
     public bestScore: number;
     public isGameOver: boolean;
+
+    // DDA 状态
+    private turnCount: number = 0;
+    private lastClearTurn: number = 0;
+    private consecutiveClears: number = 0;
+    private rescueCount: number = 0;  // 单局保底触发次数，最多3次
 
     constructor() {
         this.grid = new Grid();
@@ -58,13 +64,27 @@ export class GameLogic {
             this.grid.clearLines(rows, cols);
             const scorePerClearedCell = CLEAR_BASE_SCORE_PER_CELL
                 + (totalLines - 1) * CLEAR_EXTRA_LINE_BONUS_PER_CELL;
-            const clearScore = Math.round(clearedCells.length * scorePerClearedCell);
+            // Combo 加成：连续第N次消行，分数倍率递增
+            const comboMult = this.consecutiveClears >= 4 ? 3.0
+                : this.consecutiveClears >= 3 ? 2.0
+                : this.consecutiveClears >= 2 ? 1.5
+                : 1.0;
+            const clearScore = Math.round(clearedCells.length * scorePerClearedCell * comboMult);
             scoreGained += clearScore;
         }
 
         this.score += scoreGained;
         if (this.score > this.bestScore) {
             this.bestScore = this.score;
+        }
+
+        // DDA 状态更新
+        this.turnCount++;
+        if (totalLines > 0) {
+            this.consecutiveClears++;
+            this.lastClearTurn = this.turnCount;
+        } else {
+            this.consecutiveClears = 0;
         }
 
         // 从托盘中移除
@@ -82,7 +102,53 @@ export class GameLogic {
     }
 
     public refillTray(): void {
-        this.tray = getTrayShapes(TRAY_COUNT);
+        const m = this.computeDDA();
+        const fillRate = this.grid.getFillRate();
+        // 只在棋盘极度拥挤（填充率>80%）且本局保底未用完时才触发
+        if (fillRate > 0.8 && this.rescueCount < 3) {
+            // 第一优先：至少1块能消除（3次重试）
+            for (let attempt = 0; attempt < 3; attempt++) {
+                this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
+                if (this.tray.some(s => s && this.grid.canClearAnywhere(s))) {
+                    this.rescueCount++;
+                    return;
+                }
+            }
+            // 兜底：至少1块能放（3次重试）
+            for (let attempt = 0; attempt < 3; attempt++) {
+                this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
+                if (this.tray.some(s => s && this.grid.canPlaceAnywhere(s))) {
+                    this.rescueCount++;
+                    return;
+                }
+            }
+        }
+        // 正常情况或保底用完：直接出块
+        this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
+    }
+
+    /** 根据棋盘填充率计算 DDA 倍率 */
+    private computeDDA(): DDAMultipliers {
+        const fillRate = this.grid.getFillRate();
+
+        // 基础倍率
+        let small = 1.0;   // 1/3格
+        let medium = 1.0;  // 4/5格
+        let large = 1.0;   // 6/7/9格
+        let line = 1.0;    // 直线块
+
+        // 棋盘拥挤度感知
+        if (fillRate > 0.7) {
+            // 拥挤：小块加权，大块降权
+            small *= 1.6;
+            large *= 0.4;
+        } else if (fillRate < 0.3) {
+            // 空旷：大块加权，小块降权
+            large *= 1.5;
+            small *= 0.6;
+        }
+
+        return { small, medium, large, line };
     }
 
     public checkGameOver(): boolean {
@@ -97,10 +163,13 @@ export class GameLogic {
     }
 
     public restart(): void {
-        // 无尽模式重新挑战：清空棋盘和本次分数，保留历史最高分。
         this.grid.clear();
         this.score = 0;
         this.isGameOver = false;
+        this.turnCount = 0;
+        this.lastClearTurn = 0;
+        this.consecutiveClears = 0;
+        this.rescueCount = 0;
         this.refillTray();
     }
 }
