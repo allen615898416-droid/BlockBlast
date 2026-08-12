@@ -26,6 +26,3 @@ export const EMPTY_CELL_COLOR: [number, number, number] = [38, 49, 95];
 export const SCORE_PER_PLACED_CELL = 1;
 export const CLEAR_BASE_SCORE_PER_CELL = 7.125;
 export const CLEAR_EXTRA_LINE_BONUS_PER_CELL = 0.875;
-
-// 关卡目标分（每关独立计分，达标即过关，分数清零进下一关）
-export const LEVEL_TARGETS: number[] = [100, 150, 210, 280, 360, 450, 550, 660, 780, 920];
