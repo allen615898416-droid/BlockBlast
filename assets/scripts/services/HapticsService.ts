@@ -54,7 +54,7 @@ class HapticsServiceClass {
         try {
             native.reflection.callStaticMethod(ANDROID_HAPTICS_CLASS, method, SIG_STRING, arg);
         } catch {
-            // 原生桥接失败不应影响游戏流程。
+            // Native bridge failure should not affect game flow.
         }
     }
 
@@ -62,7 +62,7 @@ class HapticsServiceClass {
         try {
             (globalThis as unknown as { navigator?: NavigatorVibrate }).navigator?.vibrate?.(pattern);
         } catch {
-            // 浏览器可能不支持或用户禁用震动。
+            // Browser may not support vibration or user disabled it.
         }
     }
 }

@@ -1,4 +1,4 @@
-// Block Blast - 8x12 网格数据模型
+// Block Blast - 8x12 Grid Data Model
 
 import { GRID_COLS, GRID_ROWS } from './Constants';
 import { GridPosition, LineCheckResult, Shape } from './Types';
@@ -6,7 +6,7 @@ import { GridPosition, LineCheckResult, Shape } from './Types';
 export class Grid {
     public readonly rows: number = GRID_ROWS;
     public readonly cols: number = GRID_COLS;
-    // 0 = 空, colorIndex+1 = 已填充 (存 color+1 使 0 表示空)
+    // 0 = empty, colorIndex+1 = filled (store color+1 so 0 means empty)
     private cells: Int8Array;
 
     constructor() {
@@ -130,7 +130,7 @@ export class Grid {
         return false;
     }
 
-    /** 检查某个形状放在棋盘任意位置能否触发消除 */
+    /** Check if placing the shape anywhere on the board can trigger a line clear */
     public canClearAnywhere(shape: Shape): boolean {
         for (let r = 0; r < GRID_ROWS; r++) {
             for (let c = 0; c < GRID_COLS; c++) {
@@ -147,7 +147,7 @@ export class Grid {
         this.cells.fill(0);
     }
 
-    /** 返回棋盘填充率 0~1 */
+    /** Returns board fill rate 0~1 */
     public getFillRate(): number {
         let filled = 0;
         for (let i = 0; i < this.cells.length; i++) {

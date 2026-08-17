@@ -1,4 +1,4 @@
-// Block Blast v0.1.0 - 移动端竖屏核心玩法与编辑器可配置表现层
+// Block Blast v0.1.0 - Mobile Portrait Core Gameplay & Editor-Configurable Presentation Layer
 
 import { _decorator, Component, Node, Graphics, UITransform, Vec3, Color, Label, LabelOutline, Font, view, ResolutionPolicy, sys, macro, EventTouch, Sprite, SpriteFrame, Texture2D, resources, tween, Tween, input, Input, gfx } from 'cc';
 import { GameLogic } from './core/GameLogic';
@@ -81,52 +81,52 @@ const SPARKLE_COLORS = [
 
 @ccclass('GameApp')
 export class GameApp extends Component {
-    @property({ type: Node, tooltip: '编辑器可见的棋盘根节点。为空时自动查找 BoardRoot。' })
+    @property({ type: Node, tooltip: 'Board root node. Auto-finds BoardRoot if empty.' })
     public boardRoot: Node | null = null;
 
-    @property({ type: Node, tooltip: '编辑器可见的托盘根节点。为空时自动查找 TrayRoot。' })
+    @property({ type: Node, tooltip: 'Tray root node. Auto-finds TrayRoot if empty.' })
     public trayRoot: Node | null = null;
 
-    @property({ type: Node, tooltip: '编辑器可见的 UI 根节点。为空时自动查找 UIRoot。' })
+    @property({ type: Node, tooltip: 'UI root node. Auto-finds UIRoot if empty.' })
     public uiRoot: Node | null = null;
 
-    @property({ type: Node, tooltip: '编辑器可见的拖拽方块层。为空时自动查找 DragShape。' })
+    @property({ type: Node, tooltip: 'Drag shape layer. Auto-finds DragShape if empty.' })
     public dragRoot: Node | null = null;
 
-    @property({ type: Node, tooltip: '编辑器可见的特效层。为空时自动查找 EffectLayer。' })
+    @property({ type: Node, tooltip: 'Effect layer. Auto-finds EffectLayer if empty.' })
     public effectRoot: Node | null = null;
 
-    @property({ type: [SpriteFrame], tooltip: '七个 cell：红、蓝、绿、紫、黄、橙、青，分别对应 1/3/5/6/7/4/9 格；为空时走 resources 加载。' })
+    @property({ type: [SpriteFrame], tooltip: 'Seven cell sprites: red, blue, green, purple, yellow, orange, cyan. Auto-loads from resources if empty.' })
     public cellFrameAssets: SpriteFrame[] = [];
 
-    @property({ type: Font, tooltip: 'roblock HUD/正文用字重：Alibaba PuHuiTi Medium。为空时走 resources 回退加载。' })
+    @property({ type: Font, tooltip: 'HUD/body font: Alibaba PuHuiTi Medium. Auto-loads from resources if empty.' })
     public hudFont: Font | null = null;
 
-    @property({ type: Font, tooltip: 'roblock 标题/数字用字重：Alibaba PuHuiTi Bold。为空时走 resources 回退加载。' })
+    @property({ type: Font, tooltip: 'Title/number font: Alibaba PuHuiTi Bold. Auto-loads from resources if empty.' })
     public titleFont: Font | null = null;
 
-    @property({ type: Font, tooltip: 'roblock 强按钮/弹窗标题用字重：Alibaba PuHuiTi Heavy。为空时走 resources 回退加载。' })
+    @property({ type: Font, tooltip: 'Strong button/popup title font: Alibaba PuHuiTi Heavy. Auto-loads from resources if empty.' })
     public heavyFont: Font | null = null;
 
-    @property({ type: SpriteFrame, tooltip: 'roblock 消除高亮条形柔光 soft_glow_bar。为空时走 resources 回退加载。' })
+    @property({ type: SpriteFrame, tooltip: 'Clear highlight soft glow bar. Auto-loads from resources if empty.' })
     public softGlowBarFrame: SpriteFrame | null = null;
 
-    @property({ type: [SpriteFrame], tooltip: 'roblock 星点贴图 smallest/small/medium/big/biggest。为空时走 resources 回退加载。' })
+    @property({ type: [SpriteFrame], tooltip: 'Star sprites: smallest/small/medium/big/biggest. Auto-loads from resources if empty.' })
     public starFrames: SpriteFrame[] = [];
 
-    @property({ tooltip: '是否启用消除星点扩散特效。' })
+    @property({ tooltip: 'Enable clear burst sparkle effect.' })
     public enableClearBurstSparkles = true;
 
-    @property({ tooltip: '是否启用放置礼花特效。' })
+    @property({ tooltip: 'Enable placement confetti effect.' })
     public enablePlacementConfetti = true;
 
-    @property({ tooltip: '是否启用消除预览柔光和呼吸星点。' })
+    @property({ tooltip: 'Enable clear preview glow and breathing sparkles.' })
     public enableClearPreviewGlow = true;
 
-    // 游戏逻辑
+    // Game logic
     private gameLogic: GameLogic;
 
-    // 网格渲染
+    // Grid rendering
     private gridNode: Node;
     private gridBg: Graphics;
     private gridCells: Graphics;
@@ -136,11 +136,11 @@ export class GameApp extends Component {
     private highlightSparkleLayer: Node;
     private effectLayer: Node;
 
-    // 托盘渲染
+    // Tray rendering
     private trayNode: Node;
     private traySlots: Graphics[] = [];
 
-    // 资源与反馈
+    // Resources & feedback
     private cellFrames: (SpriteFrame | null)[] = [];
     private fontAssets: { medium: Font | null; bold: Font | null; heavy: Font | null } = { medium: null, bold: null, heavy: null };
     private loadedSoftGlowBarFrame: SpriteFrame | null = null;
@@ -151,22 +151,22 @@ export class GameApp extends Component {
     private lastPreviewPlacement: { row: number; col: number; canPlace: boolean } | null = null;
     private sparkleTweens: Node[] = [];
 
-    // 拖拽
+    // Drag
     private dragNode: Graphics;
     private dragShapeIndex: number = -1;
     private currentTouchPos: Vec3 | null = null;
 
-    // 分数
+    // Score
     private scoreLabel: Label;
     private bestLabel: Label;
 
-    // 游戏结束
+    // Game over
     private gameOverNode: Node;
     private gameOverScoreLabel: Label;
     private gameOverBestLabel: Label;
     private gameOverRestartButton: Node;
 
-    // 移动端竖屏布局（390×844，参考 roblock 项目）
+    // Mobile portrait layout (390x844, based on roblock project)
     private GRID_Y = -8;
     private TRAY_Y = -336;
     private SCORE_Y = 356;
@@ -174,15 +174,15 @@ export class GameApp extends Component {
     private readonly TRAY_PREVIEW_MAX_WIDTH = 108;
     private readonly TRAY_PREVIEW_MAX_HEIGHT = 92;
 
-    // ========== 生命周期 ==========
+    // ========== Lifecycle ==========
 
     start() {
         view.setDesignResolutionSize(DESIGN_WIDTH, DESIGN_HEIGHT, ResolutionPolicy.FIXED_HEIGHT);
 
-        // 移动端专用：锁定竖屏渲染方向（设备方向锁定在 AndroidManifest 中配置）
+        // Mobile: lock portrait render orientation (device orientation locked in AndroidManifest)
         view.setOrientation(macro.ORIENTATION_PORTRAIT);
 
-        // APK 端安全区适配（刘海屏/状态栏/导航栏），只围绕 390×844 移动端布局微调。
+        // APK safe area adaptation (notch/status bar/nav bar), minor adjustments around 390x844 layout.
         if (sys.isNative) {
             const safeArea = sys.getSafeAreaRect();
             if (safeArea.width > 0 && safeArea.height > 0) {
@@ -195,7 +195,7 @@ export class GameApp extends Component {
             }
         }
 
-        // 确保 GameApp 节点有 full-screen UITransform（触摸事件全屏触发）
+        // Ensure GameApp node has full-screen UITransform (touch events fire across entire screen)
         const transform = this.node.getComponent(UITransform) || this.node.addComponent(UITransform);
         transform.setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
 
@@ -207,7 +207,7 @@ export class GameApp extends Component {
 
         this.createBackground();
         this.createScoreLabel();
-        this.createTopButtons();
+        this.createScoreLabel();
         this.createGrid();
         this.createTray();
         this.createDragNode();
@@ -218,7 +218,7 @@ export class GameApp extends Component {
         this.loadVfxFrames();
 
         this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
-        // 节点事件 + 全局 input 双保险：桌面预览/移动端/拖拽目标被清理后都能继续收到拖动。
+        // Node event + global input dual insurance: desktop preview / mobile / drag target cleanup all receive drag.
         this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
@@ -239,7 +239,7 @@ export class GameApp extends Component {
         input.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
     }
 
-    // ========== 创建节点 ==========
+    // ========== Node Creation ==========
 
     private getOrCreateChild(parent: Node, name: string): { node: Node; created: boolean } {
         const existing = parent.getChildByName(name);
@@ -266,6 +266,8 @@ export class GameApp extends Component {
     private hideEditorOnlyNodes() {
         const palette = this.node.getChildByName('ArtPalette_CellSamples');
         if (palette) palette.active = false;
+        const settings = this.node.getChildByName('settings') ?? this.uiRoot?.getChildByName('settings');
+        if (settings) settings.active = false;
     }
 
     private initializeFonts() {
@@ -306,7 +308,7 @@ export class GameApp extends Component {
     }
 
     private applyAllLabelStyles() {
-        // HUD / GameOver 均沿用场景与 Inspector 样式，运行时只更新数字。
+        // HUD / GameOver use scene & Inspector styles; runtime only updates numbers.
     }
 
     private createBackground() {
@@ -330,24 +332,6 @@ export class GameApp extends Component {
         }
     }
 
-    private createTopButtons() {
-        if (!this.uiRoot) this.uiRoot = this.node.getChildByName('UIRoot');
-        if (!this.uiRoot) {
-            console.error('[BlockBlast] Missing editor node: UIRoot');
-            return;
-        }
-
-        // 顶部图标只复用编辑器节点，不创建、不改位置、不改尺寸、不改 Sprite。
-        const settingsNode = this.uiRoot.getChildByName('settings');
-        if (settingsNode) {
-            settingsNode.off(Node.EventType.TOUCH_START);
-            settingsNode.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
-                event.propagationStopped = true;
-                this.sfx?.play('ui_tap');
-            }, this);
-        }
-    }
-
     private createScoreLabel() {
         if (!this.uiRoot) this.uiRoot = this.node.getChildByName('UIRoot');
         if (!this.uiRoot) {
@@ -355,7 +339,7 @@ export class GameApp extends Component {
             return;
         }
 
-        // HUD 必须来自 Main.scene；运行时只持有引用和更新文本，不创建额外 Label。
+        // HUD must come from Main.scene; runtime only holds references and updates text, no extra Labels created.
         const scoreLabel = this.uiRoot.getChildByName('ScoreLabel')?.getComponent(Label);
         const bestLabel = this.uiRoot.getChildByName('BestLabel')?.getComponent(Label);
         if (!scoreLabel || !bestLabel) {
@@ -396,7 +380,7 @@ export class GameApp extends Component {
         this.ensureTransform(previewInfo.node);
         this.gridPreview = this.ensureGraphics(previewInfo.node);
 
-        // 明确分层：柔光在 cell 后方，只让边缘溢出；预览、彩边与星光在 cell 上方。
+        // Layering: glow behind cells with edge overflow; preview, border and sparkles above cells.
         bgInfo.node.setSiblingIndex(0);
         glowInfo.node.setSiblingIndex(1);
         cellsInfo.node.setSiblingIndex(2);
@@ -525,14 +509,14 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v2.9.0';
+        label.string = 'v3.2.0';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);
         label.overflow = Label.Overflow.NONE;
     }
 
-    // ========== 渲染 ==========
+    // ========== Rendering ==========
 
     private updateView() {
         this.drawGridBg();
@@ -554,7 +538,7 @@ export class GameApp extends Component {
         const gridWidth = GRID_COLS * CELL_SIZE;
         const gridHeight = GRID_ROWS * CELL_SIZE;
 
-        // 棋盘外围采用贴近背景的分层蓝边：外层柔亮、主体中蓝、底/右侧稍深，模拟原版烘焙渐变。
+        // Board border: layered blue edge matching background — outer soft bright, mid blue, bottom/right slightly darker.
         const frameX = -gridWidth / 2 - 4;
         const frameY = -gridHeight / 2 - 4;
         const frameW = gridWidth + 8;
@@ -570,7 +554,7 @@ export class GameApp extends Component {
         g.lineWidth = 2;
         g.roundRect(frameX + 1, frameY + 1, frameW - 2, frameH - 2, 6);
         g.stroke();
-        // 上边与左边更亮，底边与右边更深，避免整圈像纯黑描边。
+        // Top/left brighter, bottom/right darker; avoids solid black outline.
         g.strokeColor = new Color(89, 118, 191, 185);
         g.lineWidth = 1.5;
         g.moveTo(frameX + 7, frameY + frameH - 1);
@@ -585,7 +569,7 @@ export class GameApp extends Component {
         g.lineTo(frameX + frameW - 1, frameY + frameH - 7);
         g.stroke();
 
-        // 空格保持 1px 间距；低圆角减少四角过度露黑。
+        // Empty cells keep 1px gap; low corner radius reduces corner clipping.
         const rs = this.CELL_RENDER;
         for (let row = 0; row < GRID_ROWS; row++) {
             for (let col = 0; col < GRID_COLS; col++) {
@@ -597,7 +581,7 @@ export class GameApp extends Component {
             }
         }
 
-        // 格线：加深加实，远距离也能看清棋盘分隔。
+        // Grid lines: deep and solid, visible from distance.
         g.strokeColor = new Color(5, 10, 30, 255);
         g.lineWidth = 1;
         for (let col = 1; col < GRID_COLS; col++) {
@@ -634,7 +618,7 @@ export class GameApp extends Component {
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             sprite.spriteFrame = frame;
             sprite.color = tintColor ? new Color(tintColor.r, tintColor.g, tintColor.b, tintColor.a) : new Color(255, 255, 255, alpha);
-            // SpriteFrame 赋值后再设置尺寸，避免 Sprite 按原图尺寸覆盖 UITransform，导致方块比棋盘格大。
+            // Set size after SpriteFrame assignment to prevent Sprite overriding UITransform with original image size.
             transform.setContentSize(size, size);
             return;
         }
@@ -705,7 +689,7 @@ export class GameApp extends Component {
             const offsetX = -(shape.width * previewCellSize) / 2 + previewCellSize / 2;
             const offsetY = (shape.height * previewCellSize) / 2 - previewCellSize / 2;
 
-            // 候选区投影：保持轻微右下偏移，避免与小尺寸候选块脱节。
+            // Tray shadow: slight bottom-right offset to match small candidate blocks.
             g.fillColor = new Color(18, 28, 66, 95);
             for (const cell of shape.cells) {
                 const x = offsetX + cell.col * previewCellSize + 3;
@@ -729,12 +713,12 @@ export class GameApp extends Component {
         const shape = this.gameLogic.tray[this.dragShapeIndex];
         if (!shape) return;
 
-        // offsetX/offsetY 让 shape 视觉中心精确对齐到 dragNode 节点中心（不对称形状也成立）
+        // offsetX/offsetY align shape visual center to dragNode center (works for asymmetric shapes)
         const shapeCenter = this.getShapeVisualCenter(shape);
         const offsetX = -shapeCenter.col * CELL_SIZE;
         const offsetY = shapeCenter.row * CELL_SIZE;
 
-        // 拖拽实体始终跟随手指偏移位置；棋盘落点由 GridPreview 单独吸附，避免实体吸附后看起来“消失”。
+        // Drag entity always follows finger; board snap handled by GridPreview separately.
         const adjustedPos = this.getAdjustedDragPos(touchPos);
         const parentTransform = this.node.getComponent(UITransform);
         const localPos = parentTransform.convertToNodeSpaceAR(adjustedPos);
@@ -1049,7 +1033,7 @@ export class GameApp extends Component {
         );
     }
 
-    // ========== 触摸交互 ==========
+    // ========== Touch Interaction ==========
 
     private onTouchStart(event: EventTouch) {
         if (this.gameLogic.isGameOver) return;
@@ -1057,7 +1041,7 @@ export class GameApp extends Component {
         const uiPos = event.getUILocation();
         const pos = new Vec3(uiPos.x, uiPos.y, 0);
 
-        // 检测是否点中了托盘中的形状
+        // Check if touch hit a tray shape
         for (let i = 0; i < TRAY_COUNT; i++) {
             const shape = this.gameLogic.tray[i];
             if (!shape) continue;
@@ -1081,7 +1065,7 @@ export class GameApp extends Component {
                 HapticsService.previewSwitch();
                 this.drawDragShape(pos);
                 this.updatePlacementPreview(pos);
-                // 清空对应槽位的渲染，避免拖拽过程中原位残留形成"双影"
+                // Clear slot rendering to avoid ghost image during drag
                 this.traySlots[i].clear();
                 this.clearChildren(this.traySlots[i].node);
                 return;
@@ -1122,7 +1106,7 @@ export class GameApp extends Component {
                     if (result.linesCleared > 0) {
                         HapticsService.cleared();
                     }
-                    // GameLogic 已在本次计分后更新 bestScore；这里负责持久化。
+                    // GameLogic already updated bestScore; here we persist it.
                     sys.localStorage.setItem('block_blast_best', this.gameLogic.bestScore.toString());
                     this.promotePreviewCellsToPlaced();
                     if (result.linesCleared > 0) {
@@ -1153,7 +1137,7 @@ export class GameApp extends Component {
         this.gridPreview.clear();
         this.clearChildren(this.gridPreview.node);
         this.clearHighlightEffects();
-        // 放置失败时 tray 数组未变，需把原槽位方块画回来；放置成功时 updateView 已重绘，重复调用无副作用
+        // On placement failure tray array unchanged, redraw slot; on success updateView already redrew, idempotent.
         this.drawTray();
     }
 
@@ -1305,7 +1289,7 @@ export class GameApp extends Component {
         node.destroy();
     }
 
-    // ========== 游戏结束 ==========
+    // ========== Game Over ==========
 
     private showGameOver() {
         this.gameOverScoreLabel.string = Math.max(0, Math.floor(this.gameLogic.score)).toString();

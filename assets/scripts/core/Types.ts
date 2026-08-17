@@ -1,4 +1,4 @@
-// Block Blast - 类型定义
+// Block Blast - Type Definitions
 
 export interface ShapeCell {
     row: number;

@@ -1,4 +1,4 @@
-// Block Blast - 游戏逻辑控制
+// Block Blast - Game Logic Controller
 
 import { Grid } from './Grid';
 import { getInitialTrayShapes, getTrayShapes, getTrayShapesWithDDA, DDAMultipliers } from './Shapes';
@@ -17,11 +17,11 @@ export class GameLogic {
     public bestScore: number;
     public isGameOver: boolean;
 
-    // DDA 状态
+    // DDA state
     private turnCount: number = 0;
     private lastClearTurn: number = 0;
     private consecutiveClears: number = 0;
-    private rescueCount: number = 0;  // 单局保底触发次数，最多3次
+    private rescueCount: number = 0;  // rescue triggers per game, max 3
 
     constructor() {
         this.grid = new Grid();
@@ -51,11 +51,11 @@ export class GameLogic {
 
         const placedCells = this.grid.getShapeCells(shape, row, col);
 
-        // 放置得分：每个组成形状的 cell 计 1 分。
+        // Placement score: 1 point per cell in the shape.
         this.grid.place(shape, row, col);
         let scoreGained = shape.cells.length * SCORE_PER_PLACED_CELL;
 
-        // 消除得分：按实际清除的 cell 数计算；同次多消行/列会提高每个 cell 的分值。
+        // Clear score: based on actual cleared cell count; multi-line clears increase per-cell value.
         const { rows, cols } = this.grid.checkLines();
         const totalLines = rows.length + cols.length;
         const clearedCells = this.grid.getLineCells(rows, cols);
@@ -64,7 +64,7 @@ export class GameLogic {
             this.grid.clearLines(rows, cols);
             const scorePerClearedCell = CLEAR_BASE_SCORE_PER_CELL
                 + (totalLines - 1) * CLEAR_EXTRA_LINE_BONUS_PER_CELL;
-            // Combo 加成：连续第N次消行，分数倍率递增
+            // Combo bonus: consecutive clears increase score multiplier
             const comboMult = this.consecutiveClears >= 4 ? 3.0
                 : this.consecutiveClears >= 3 ? 2.0
                 : this.consecutiveClears >= 2 ? 1.5
@@ -78,7 +78,7 @@ export class GameLogic {
             this.bestScore = this.score;
         }
 
-        // DDA 状态更新
+        // DDA state update
         this.turnCount++;
         if (totalLines > 0) {
             this.consecutiveClears++;
@@ -87,15 +87,15 @@ export class GameLogic {
             this.consecutiveClears = 0;
         }
 
-        // 从托盘中移除
+        // Remove from tray
         this.tray[trayIndex] = null;
 
-        // 托盘空了 → 补充
+        // Tray empty → refill
         if (this.tray.every(s => s === null)) {
             this.refillTray();
         }
 
-        // 无尽模式：没有过关目标，只在所有候选块都无法放置时结束。
+        // Endless mode: no level target; game over only when no candidate can be placed.
         const gameOver = this.checkGameOver();
 
         return { success: true, linesCleared: totalLines, scoreGained, gameOver, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
@@ -104,9 +104,9 @@ export class GameLogic {
     public refillTray(): void {
         const m = this.computeDDA();
         const fillRate = this.grid.getFillRate();
-        // 只在棋盘极度拥挤（填充率>80%）且本局保底未用完时才触发
+        // Only trigger when board is critically full (fill rate >80%) and rescue not exhausted
         if (fillRate > 0.8 && this.rescueCount < 3) {
-            // 第一优先：至少1块能消除（3次重试）
+            // First priority: at least 1 shape can clear (3 retries)
             for (let attempt = 0; attempt < 3; attempt++) {
                 this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
                 if (this.tray.some(s => s && this.grid.canClearAnywhere(s))) {
@@ -114,7 +114,7 @@ export class GameLogic {
                     return;
                 }
             }
-            // 兜底：至少1块能放（3次重试）
+            // Fallback: at least 1 shape can be placed (3 retries)
             for (let attempt = 0; attempt < 3; attempt++) {
                 this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
                 if (this.tray.some(s => s && this.grid.canPlaceAnywhere(s))) {
@@ -123,27 +123,27 @@ export class GameLogic {
                 }
             }
         }
-        // 正常情况或保底用完：直接出块
+        // Normal case or rescue exhausted: just generate
         this.tray = getTrayShapesWithDDA(TRAY_COUNT, m);
     }
 
-    /** 根据棋盘填充率计算 DDA 倍率 */
+    /** Compute DDA multipliers based on board fill rate */
     private computeDDA(): DDAMultipliers {
         const fillRate = this.grid.getFillRate();
 
-        // 基础倍率
-        let small = 1.0;   // 1/3格
-        let medium = 1.0;  // 4/5格
-        let large = 1.0;   // 6/7/9格
-        let line = 1.0;    // 直线块
+        // Base multipliers
+        let small = 1.0;   // 1/3-cell
+        let medium = 1.0;  // 4/5-cell
+        let large = 1.0;   // 6/7/9-cell
+        let line = 1.0;    // line shapes
 
-        // 棋盘拥挤度感知
+        // Board congestion awareness
         if (fillRate > 0.7) {
-            // 拥挤：小块加权，大块降权
+            // Crowded: boost small, reduce large
             small *= 1.6;
             large *= 0.4;
         } else if (fillRate < 0.3) {
-            // 空旷：大块加权，小块降权
+            // Sparse: boost large, reduce small
             large *= 1.5;
             small *= 0.6;
         }

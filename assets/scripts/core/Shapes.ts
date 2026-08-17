@@ -1,4 +1,4 @@
-// Block Blast - 形状库
+// Block Blast - Shape Library
 
 import { Shape, ShapeCell } from './Types';
 
@@ -9,8 +9,8 @@ interface WeightedShapeDefinition {
     matrix: number[][];
 }
 
-// 颜色索引：0红、1蓝、2绿、3紫、4黄、5橙、6青。-1 表示随机颜色。
-// 概率：1格 5%、3格 10%、4格 71%、5格 4%、6格 4%、7格 3%、9格 3%。
+// Color index: 0=red, 1=blue, 2=green, 3=purple, 4=yellow, 5=orange, 6=cyan. -1 = random color.
+// Probability: 1-cell 5%, 3-cell 10%, 4-cell 71%, 5-cell 4%, 6-cell 4%, 7-cell 3%, 9-cell 3%.
 const SHAPE_POOL: WeightedShapeDefinition[] = [
     { id: 'i1', color: 0, weight: 5, matrix: [[1]] },
 
@@ -106,13 +106,13 @@ export function getTrayShapes(count: number): Shape[] {
     return shapes;
 }
 
-// ========== DDA 动态难度调整 ==========
+// ========== DDA (Dynamic Difficulty Adjustment) ==========
 
 export interface DDAMultipliers {
-    small: number;   // 1/3格倍率
-    medium: number;  // 4/5格倍率
-    large: number;   // 6/7/9格倍率
-    line: number;    // 直线块额外倍率
+    small: number;   // multiplier for 1/3-cell shapes
+    medium: number;  // multiplier for 4/5-cell shapes
+    large: number;   // multiplier for 6/7/9-cell shapes
+    line: number;    // extra multiplier for line shapes
 }
 
 const LINE_IDS = new Set(['i3h', 'i3v', 'i4h', 'i4v']);
