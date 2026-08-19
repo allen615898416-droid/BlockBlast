@@ -6,6 +6,8 @@ import { GridPosition, Shape } from './core/Types';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, CELL_GAP, TRAY_COUNT, TRAY_CELL_SIZE, SHAPE_COLORS, EMPTY_CELL_COLOR } from './core/Constants';
 import { SfxService } from './services/SfxService';
 import { HapticsService } from './services/HapticsService';
+import { Analytics } from './core/AnalyticsService';
+import { GameStatsCollector } from './core/GameStatsCollector';
 
 const { ccclass, property } = _decorator;
 
@@ -226,7 +228,9 @@ export class GameApp extends Component {
         input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
-        this.updateView();
+        // ===== 埋点: 应用启动 + 首局开局 =====
+        Analytics.track('app_launch', { version: '3.2.0' });
+        this.startRound('first');
     }
 
     protected onDestroy() {
@@ -753,6 +757,7 @@ export class GameApp extends Component {
 
         const { row: placeRow, col: placeCol } = placement;
         const canPlace = this.gameLogic.grid.canPlace(shape, placeRow, placeCol);
+        GameStatsCollector.onPreview(canPlace); // 埋点: 预览(可放/不可放)
         this.lastPreviewPlacement = { row: placeRow, col: placeCol, canPlace };
         const previewCode = canPlace ? 'valid' : 'invalid';
         if (this.lastPreviewCode !== previewCode) {
@@ -1063,6 +1068,7 @@ export class GameApp extends Component {
                 this.lastPreviewPlacement = null;
                 this.sfx.play('piece_pickup');
                 HapticsService.previewSwitch();
+                GameStatsCollector.onPickup(); // 埋点: 拿起方块
                 this.drawDragShape(pos);
                 this.updatePlacementPreview(pos);
                 // Clear slot rendering to avoid ghost image during drag
@@ -1079,6 +1085,7 @@ export class GameApp extends Component {
         const uiPos = event.getUILocation();
         const pos = new Vec3(uiPos.x, uiPos.y, 0);
         this.currentTouchPos = pos;
+        GameStatsCollector.onDragMove(); // 埋点: 拖动移动
 
         this.drawDragShape(pos);
         this.updatePlacementPreview(pos);
@@ -1125,6 +1132,7 @@ export class GameApp extends Component {
             this.sfx.play('piece_reject');
             HapticsService.rejected();
         }
+        GameStatsCollector.onPlaceAttempt(placed); // 埋点: 落子尝试(成功/失败)
 
         this.dragShapeIndex = -1;
         this.currentTouchPos = null;
@@ -1291,6 +1299,18 @@ export class GameApp extends Component {
 
     // ========== Game Over ==========
 
+    /** 开局/重开统一入口(埋点): first=应用启动首局, restart=失败后重开 */
+    private startRound(reason: 'first' | 'restart') {
+        if (reason === 'restart') {
+            this.sfx.play('ui_tap');
+            this.gameLogic.restart();
+            this.gameOverNode.active = false;
+        }
+        GameStatsCollector.startGame();
+        Analytics.track('game_start', { reason, best_score: this.gameLogic.bestScore });
+        this.updateView();
+    }
+
     private showGameOver() {
         this.gameOverScoreLabel.string = Math.max(0, Math.floor(this.gameLogic.score)).toString();
         this.gameOverBestLabel.string = Math.max(0, Math.floor(this.gameLogic.bestScore)).toString();
@@ -1301,12 +1321,48 @@ export class GameApp extends Component {
         tween(this.gameOverNode)
             .to(0.25, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
             .start();
+
+        // ===== 埋点: 结算(所有局内信息合并上报) =====
+        this.reportGameOver();
+    }
+
+    /** 收口统计: 局内全部行为 + 对局结果合并为单个 game_over 事件上报 */
+    private reportGameOver() {
+        const logic = this.gameLogic;
+        const fillRate = logic.grid.getFillRate();
+        const totalCells = GRID_COLS * GRID_ROWS;
+        const { params, isNewBest } = GameStatsCollector.dump(
+            {
+                totalPlacedCells: logic.totalPlacedCells,
+                totalLinesCleared: logic.totalLinesCleared,
+                maxLinesOnce: logic.maxLinesOnce,
+                clearStreakMax: logic.clearStreakMax,
+                comboBonusClears: logic.comboBonusClears,
+                turns: logic.turnCount,
+                refills: logic.refills,
+                rescues: logic.rescueCount,
+                clearsByLines: logic.clearsByLines,
+                shapeCellsHistogram: logic.shapeCellsHistogram,
+            },
+            {
+                score: Math.max(0, Math.floor(logic.score)),
+                emptyCells: Math.round(totalCells * (1 - fillRate)),
+                fillRate,
+            },
+        );
+        Analytics.track('game_over', params);
+        if (isNewBest) {
+            // 新纪录单独事件, 便于运营聚焦(参数与 game_over 合并口径一致)
+            Analytics.track('new_best_score', { score: params.score, best_score: params.best_score });
+        }
+        // Firebase 单设备聚合 User Property(跨局累计值)
+        const ups = GameStatsCollector.userProperties();
+        for (const key of Object.keys(ups)) {
+            Analytics.setUserProperty(key, ups[key]!);
+        }
     }
 
     private restart() {
-        this.sfx.play('ui_tap');
-        this.gameLogic.restart();
-        this.gameOverNode.active = false;
-        this.updateView();
+        this.startRound('restart');
     }
 }

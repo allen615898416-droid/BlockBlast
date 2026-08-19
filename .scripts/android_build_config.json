@@ -1,0 +1,14 @@
+{
+  "platform": "android",
+  "debug": false,
+  "startScene": "2a8b1c00-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+  "packages": {
+    "android": {
+      "packageName": "com.blockwin.game",
+      "apiLevel": 35,
+      "appABIs": ["arm64-v8a"],
+      "appBundle": false,
+      "useDebugKeystore": true
+    }
+  }
+}

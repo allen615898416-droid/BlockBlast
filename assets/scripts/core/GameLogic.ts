@@ -18,10 +18,20 @@ export class GameLogic {
     public isGameOver: boolean;
 
     // DDA state
-    private turnCount: number = 0;
+    public turnCount: number = 0;
     private lastClearTurn: number = 0;
     private consecutiveClears: number = 0;
-    private rescueCount: number = 0;  // rescue triggers per game, max 3
+    public rescueCount: number = 0;  // rescue triggers per game, max 3
+
+    // ===== 局内统计(埋点用, GameStatsCollector 结算时读取) =====
+    public totalPlacedCells: number = 0;            // 放置的方块格总数
+    public totalLinesCleared: number = 0;           // 消行总数
+    public maxLinesOnce: number = 0;                // 单次最大消行数
+    public clearStreakMax: number = 0;              // 连续消行最大段数
+    public comboBonusClears: number = 0;            // 吃到连击倍率(>1x)的消行次数
+    public refills: number = 0;                     // 局内托盘补充次数
+    public clearsByLines: Record<number, number> = {}; // 消行分布 {1:x, 2:x, 3:x, 4:x}
+    public shapeCellsHistogram: Record<number, number> = {}; // 放置方块大小分布 {格数:次数}
 
     constructor() {
         this.grid = new Grid();
@@ -54,6 +64,9 @@ export class GameLogic {
         // Placement score: 1 point per cell in the shape.
         this.grid.place(shape, row, col);
         let scoreGained = shape.cells.length * SCORE_PER_PLACED_CELL;
+        this.totalPlacedCells += shape.cells.length;
+        const shapeSize = shape.cells.length;
+        this.shapeCellsHistogram[shapeSize] = (this.shapeCellsHistogram[shapeSize] ?? 0) + 1;
 
         // Clear score: based on actual cleared cell count; multi-line clears increase per-cell value.
         const { rows, cols } = this.grid.checkLines();
@@ -71,6 +84,11 @@ export class GameLogic {
                 : 1.0;
             const clearScore = Math.round(clearedCells.length * scorePerClearedCell * comboMult);
             scoreGained += clearScore;
+            // 埋点统计: 消行
+            this.totalLinesCleared += totalLines;
+            this.maxLinesOnce = Math.max(this.maxLinesOnce, totalLines);
+            this.clearsByLines[totalLines] = (this.clearsByLines[totalLines] ?? 0) + 1;
+            if (comboMult > 1) this.comboBonusClears++;
         }
 
         this.score += scoreGained;
@@ -82,6 +100,7 @@ export class GameLogic {
         this.turnCount++;
         if (totalLines > 0) {
             this.consecutiveClears++;
+            this.clearStreakMax = Math.max(this.clearStreakMax, this.consecutiveClears);
             this.lastClearTurn = this.turnCount;
         } else {
             this.consecutiveClears = 0;
@@ -93,6 +112,7 @@ export class GameLogic {
         // Tray empty → refill
         if (this.tray.every(s => s === null)) {
             this.refillTray();
+            this.refills++;
         }
 
         // Endless mode: no level target; game over only when no candidate can be placed.
@@ -170,6 +190,14 @@ export class GameLogic {
         this.lastClearTurn = 0;
         this.consecutiveClears = 0;
         this.rescueCount = 0;
+        this.totalPlacedCells = 0;
+        this.totalLinesCleared = 0;
+        this.maxLinesOnce = 0;
+        this.clearStreakMax = 0;
+        this.comboBonusClears = 0;
+        this.refills = 0;
+        this.clearsByLines = {};
+        this.shapeCellsHistogram = {};
         this.refillTray();
     }
 }

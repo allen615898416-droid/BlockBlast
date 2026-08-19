@@ -7,7 +7,8 @@ export const CELL_GAP = 1;
 export const TRAY_COUNT = 3;
 export const TRAY_CELL_SIZE = 22;
 
-// Block colors (R, G, B): red, blue, green, purple, yellow, orange, cyanexport const SHAPE_COLORS: [number, number, number][] = [
+// Block colors (R, G, B): red, blue, green, purple, yellow, orange, cyan
+export const SHAPE_COLORS: [number, number, number][] = [
     [230, 62, 68],      // 0: red
     [48, 92, 225],      // 1: blue
     [116, 202, 72],     // 2: green
