@@ -110,44 +110,28 @@ class GameStatsCollectorImpl {
         this.session = { gamesPlayed, totalScore, totalDurationSec, bestScore };
         this.saveSession();
 
-        const avgScore = gamesPlayed > 0 ? Math.round(totalScore / gamesPlayed) : 0;
-        const avgDuration = gamesPlayed > 0 ? Math.round(totalDurationSec / gamesPlayed) : 0;
-
         const params: CountMap = {
             // 对局结果
             score: endGrid.score,
             best_score: bestScore,
             is_new_best: isNewBest ? 1 : 0,
             duration_sec: durationSec,
-            // 会话聚合
-            games_played: gamesPlayed,
-            session_avg_score: avgScore,
-            session_avg_duration: avgDuration,
-            // 交互行为
+            // 交互行为(attempts 由 place_success+place_rejected 推导;previews 合并 valid/invalid)
             pickups: this.pickups,
             drag_moves: this.dragMoves,
-            previews_valid: this.previewsValid,
-            previews_invalid: this.previewsInvalid,
-            attempts: this.attempts,
+            previews: this.previewsValid + this.previewsInvalid,
             place_success: this.placeSuccess,
             place_rejected: this.placeRejected,
-            // 放置/消行
+            // 放置/消行(clears_1~4 明细由 lines_cleared + max_lines_once 表达,避免超 25 上限)
             cells_placed: logic.totalPlacedCells,
             lines_cleared: logic.totalLinesCleared,
-            clears_1line: logic.clearsByLines[1] ?? 0,
-            clears_2line: logic.clearsByLines[2] ?? 0,
-            clears_3line: logic.clearsByLines[3] ?? 0,
-            clears_4line: logic.clearsByLines[4] ?? 0,
             max_lines_once: logic.maxLinesOnce,
             clear_streak_max: Math.max(this.clearStreakMax, logic.clearStreakMax),
-            combo_bonus_clears: logic.comboBonusClears,
             // 节奏
             turns: logic.turns,
             tray_refills: logic.refills,
             rescues: logic.rescues,
-            shape_size_hist: JSON.stringify(logic.shapeCellsHistogram),
-            // 终局棋盘
-            end_empty_cells: endGrid.emptyCells,
+            // 终局棋盘(empty_cells 由 fill_rate 推导)
             end_fill_rate: Math.round(endGrid.fillRate * 1000) / 10,
         };
         return { params, isNewBest };

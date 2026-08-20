@@ -5,6 +5,7 @@ COCOS="/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/MacOS/CocosCr
 LOG="$ROOT/build-cli.log"
 
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy FTP_PROXY ftp_proxy
+unset NODE_OPTIONS
 export NO_PROXY="*"
 
 pkill -9 -f CocosCreator 2>/dev/null
