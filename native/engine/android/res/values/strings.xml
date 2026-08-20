@@ -1,0 +1,13 @@
+<resources>
+    <!-- Firebase Analytics 手动初始化模式下，FirebaseAnalytics 底层测量服务读取的是
+         R.string.google_app_id 等字符串资源（不是 FirebaseOptions 运行时对象），
+         正常由 google-services.json + gradle 插件在构建期自动生成，我们没走插件路线所以手动补上。
+         缺失这几个资源会导致"不闪退但事件完全不上报"，日志报 Missing google_app_id（隐藏坑，见
+         cocos-firebase-analytics skill 的踩坑记录）。值来自
+         /Users/ivan/Downloads/com.blockwin.game.json（Firebase 项目 cbd-data-4b6f7，client com.blockwin.game）。 -->
+    <string name="google_app_id" translatable="false">1:373275799800:android:dbf1cfcb3aa743beefcb0d</string>
+    <string name="google_api_key" translatable="false">AIzaSyDCmluNB71iRLxy_BuPJ4ph2QAZz_ZLEu4</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyDCmluNB71iRLxy_BuPJ4ph2QAZz_ZLEu4</string>
+    <string name="project_id" translatable="false">cbd-data-4b6f7</string>
+    <string name="gcm_defaultSenderId" translatable="false">373275799800</string>
+</resources>

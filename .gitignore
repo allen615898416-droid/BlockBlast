@@ -4,7 +4,16 @@
 /local/
 /build/
 /profiles/
-/native/
+
+# native 工程：跟踪定制文件（Firebase/震动桥/构建配置），只忽略构建产物
+/native/engine/android/**/*/assets
+/native/engine/android/.gradle/
+/native/engine/android/app/.gradle/
+/native/engine/android/app/build/
+/native/engine/android/build/
+/native/engine/android/instantapp/.gradle/
+/native/engine/android/instantapp/build/
+/native/engine/android/local.properties
 
 # Node
 node_modules/
