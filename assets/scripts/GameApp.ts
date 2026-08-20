@@ -513,7 +513,7 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v3.2.0';
+        label.string = 'v3.3.0';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);

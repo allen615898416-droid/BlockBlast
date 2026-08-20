@@ -19,7 +19,8 @@ android {
 
     defaultConfig {
         applicationId APPLICATION_ID
-        minSdkVersion PROP_MIN_SDK_VERSION
+        // Firebase Analytics 23.x requires minSdk 23 (BlockBlast data tracking)
+        minSdkVersion 23
         targetSdkVersion PROP_TARGET_SDK_VERSION
         versionCode 1
         versionName "1.0"
