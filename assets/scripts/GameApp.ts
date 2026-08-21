@@ -2,7 +2,7 @@
 
 import { _decorator, Component, Node, Graphics, UITransform, Vec3, Color, Label, LabelOutline, Font, view, ResolutionPolicy, sys, macro, EventTouch, Sprite, SpriteFrame, Texture2D, resources, tween, Tween, input, Input, gfx } from 'cc';
 import { GameLogic } from './core/GameLogic';
-import { GridPosition, Shape } from './core/Types';
+import { GridPosition, Shape, PlacementResult } from './core/Types';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, CELL_GAP, TRAY_COUNT, TRAY_CELL_SIZE, SHAPE_COLORS, EMPTY_CELL_COLOR } from './core/Constants';
 import { SfxService } from './services/SfxService';
 import { HapticsService } from './services/HapticsService';
@@ -168,6 +168,25 @@ export class GameApp extends Component {
     private gameOverBestLabel: Label;
     private gameOverRestartButton: Node;
 
+    // Clear feedback (combo / grade / score popup)
+    private clearFeedbackRoot: Node = null!;
+    private comboLabel: Label = null!;
+    private gradeLabel: Label = null!;
+    private scorePopupLabel: Label = null!;
+    private feedbackToken = 0;
+
+    // Revive popup (shown on game over)
+    private reviveRoot: Node = null!;
+    private revivePopup: Node = null!;
+    private reviveTitleLabel: Label | null = null;
+    private reviveContinueLabel: Label | null = null;
+    private reviveContinueButton: Node = null!;
+    private reviveCloseButton: Node = null!;
+    // Revive ad overlay (3s placeholder played before the revive takes effect)
+    private reviveAdRoot: Node = null!;
+    private reviveAdLabel: Label | null = null;
+    private reviveAdRemaining = 0;
+
     // Mobile portrait layout (390x844, based on roblock project)
     private GRID_Y = -8;
     private TRAY_Y = -336;
@@ -214,7 +233,10 @@ export class GameApp extends Component {
         this.createTray();
         this.createDragNode();
         this.createEffectLayer();
+        this.createClearFeedbackNodes();
         this.createGameOverNode();
+        this.createReviveNodes();
+        this.createReviveAdNodes();
         this.createVersionLabel();
         this.loadCellFrames();
         this.loadVfxFrames();
@@ -313,6 +335,13 @@ export class GameApp extends Component {
 
     private applyAllLabelStyles() {
         // HUD / GameOver use scene & Inspector styles; runtime only updates numbers.
+        // Feedback labels are created at runtime, so refresh their font once assets finish loading.
+        if (this.comboLabel) this.comboLabel.font = this.fontAssets.bold ?? this.comboLabel.font;
+        if (this.gradeLabel) this.gradeLabel.font = this.fontAssets.bold ?? this.gradeLabel.font;
+        if (this.scorePopupLabel) this.scorePopupLabel.font = this.fontAssets.bold ?? this.scorePopupLabel.font;
+        if (this.reviveTitleLabel) this.reviveTitleLabel.font = this.fontAssets.heavy ?? this.reviveTitleLabel.font;
+        if (this.reviveContinueLabel) this.reviveContinueLabel.font = this.fontAssets.heavy ?? this.reviveContinueLabel.font;
+        if (this.reviveAdLabel) this.reviveAdLabel.font = this.fontAssets.heavy ?? this.reviveAdLabel.font;
     }
 
     private createBackground() {
@@ -504,6 +533,329 @@ export class GameApp extends Component {
         }, this);
 
         this.gameOverNode.active = false;
+    }
+
+    private createReviveNodes() {
+        // 若在 Cocos 编辑器里手动搭建了 ReviveRoot 静态节点, 优先读取(之后可在编辑器里自由修改);
+        // 否则回退到代码动态创建, 保持原有行为不变。
+        const sceneRoot = this.node.getChildByName('ReviveRoot');
+        if (sceneRoot) {
+            this.bindReviveNodes(sceneRoot);
+            return;
+        }
+        this.buildReviveNodesDynamically();
+    }
+
+    /** 绑定编辑器里手动搭建的 ReviveRoot 静态节点(层级见下方说明)。 */
+    private bindReviveNodes(root: Node) {
+        const overlay = root.getChildByName('Overlay');
+        const popup = root.getChildByName('Popup');
+        const titleNode = popup?.getChildByName('Title');
+        const continueButton = popup?.getChildByName('ContinueButton');
+        const closeButton = popup?.getChildByName('CloseButton');
+        if (!popup || !continueButton || !closeButton) {
+            throw new Error('[BlockBlast] ReviveRoot 结构不完整: 需要 Popup / ContinueButton / CloseButton 子节点');
+        }
+
+        this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
+        root.setPosition(0, 0, 0);
+        this.reviveRoot = root;
+        this.revivePopup = popup;
+        this.reviveTitleLabel = titleNode?.getComponent(Label) ?? null;
+        this.reviveContinueButton = continueButton;
+        this.reviveContinueLabel = continueButton.getChildByName('Label')?.getComponent(Label) ?? null;
+        this.reviveCloseButton = closeButton;
+
+        // Graphics 无法在编辑器里序列化绘制内容, 遮罩/卡片/× 由代码在运行时补画。
+        if (overlay) {
+            const overlayG = this.ensureGraphics(overlay);
+            overlayG.clear();
+            overlayG.fillColor = new Color(0, 0, 0, 150);
+            overlayG.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
+            overlayG.fill();
+        }
+        const popupW = 300;
+        const popupH = 300;
+        const popupG = this.ensureGraphics(popup);
+        popupG.clear();
+        popupG.fillColor = new Color(255, 255, 255, 255);
+        popupG.roundRect(-popupW / 2, -popupH / 2, popupW, popupH, 28);
+        popupG.fill();
+        const closeG = this.ensureGraphics(closeButton);
+        closeG.clear();
+        closeG.fillColor = new Color(0, 0, 0, 26);
+        closeG.circle(0, 0, 20);
+        closeG.fill();
+        closeG.strokeColor = new Color(96, 106, 136, 255);
+        closeG.lineWidth = 3;
+        closeG.moveTo(-6, 6);
+        closeG.lineTo(6, -6);
+        closeG.moveTo(-6, -6);
+        closeG.lineTo(6, 6);
+        closeG.stroke();
+
+        continueButton.off(Node.EventType.TOUCH_START);
+        continueButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            this.onReviveContinue();
+        }, this);
+        closeButton.off(Node.EventType.TOUCH_START);
+        closeButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            this.onReviveDecline();
+        }, this);
+        root.off(Node.EventType.TOUCH_START);
+        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+
+        root.active = false;
+    }
+
+    /** 编辑器里没有 ReviveRoot 时的兜底: 代码动态创建整套 UI。 */
+    private buildReviveNodesDynamically() {
+        const { node: root } = this.getOrCreateChild(this.node, 'ReviveRoot');
+        this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
+        root.setPosition(0, 0, 0);
+        this.reviveRoot = root;
+
+        // Full-screen dim overlay (also swallows stray touches).
+        const { node: overlay } = this.getOrCreateChild(root, 'Overlay');
+        this.ensureTransform(overlay, DESIGN_WIDTH, DESIGN_HEIGHT);
+        overlay.setPosition(0, 0, 0);
+        const overlayG = this.ensureGraphics(overlay);
+        overlayG.clear();
+        overlayG.fillColor = new Color(0, 0, 0, 150);
+        overlayG.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
+        overlayG.fill();
+
+        // Rounded-square popup card.
+        const popupW = 300;
+        const popupH = 300;
+        const { node: popup } = this.getOrCreateChild(root, 'Popup');
+        this.ensureTransform(popup, popupW, popupH);
+        popup.setPosition(0, 0, 0);
+        this.revivePopup = popup;
+        const popupG = this.ensureGraphics(popup);
+        popupG.clear();
+        popupG.fillColor = new Color(255, 255, 255, 255);
+        popupG.roundRect(-popupW / 2, -popupH / 2, popupW, popupH, 28);
+        popupG.fill();
+
+        // Title text.
+        const { node: titleNode } = this.getOrCreateChild(popup, 'Title');
+        this.ensureTransform(titleNode, 280, 64);
+        titleNode.setPosition(0, 66, 0);
+        this.reviveTitleLabel = this.ensureLabel(titleNode);
+        this.applyLabelStyle(this.reviveTitleLabel, 'heavy', 24, 30, new Color(34, 44, 80, 255));
+        this.reviveTitleLabel.string = 'Continue for free!';
+
+        // Green continue button (reuses the settlement page's green button sprite).
+        const buttonW = 240;
+        const buttonH = 58;
+        const { node: button } = this.getOrCreateChild(popup, 'ContinueButton');
+        this.ensureTransform(button, buttonW, buttonH);
+        button.setPosition(0, -56, 0);
+        this.reviveContinueButton = button;
+        const btnSprite = button.getComponent(Sprite) ?? button.addComponent(Sprite);
+        btnSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        btnSprite.type = Sprite.Type.SIMPLE;
+        const restartSprite = this.gameOverRestartButton?.getComponent(Sprite);
+        if (restartSprite?.spriteFrame) btnSprite.spriteFrame = restartSprite.spriteFrame;
+
+        const { node: btnLabelNode } = this.getOrCreateChild(button, 'Label');
+        this.ensureTransform(btnLabelNode, buttonW, buttonH);
+        btnLabelNode.setPosition(0, 0, 0);
+        this.reviveContinueLabel = this.ensureLabel(btnLabelNode);
+        this.applyLabelStyle(this.reviveContinueLabel, 'heavy', 26, 30, new Color(255, 255, 255, 255));
+        this.reviveContinueLabel.string = 'Continue';
+
+        button.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            this.onReviveContinue();
+        }, this);
+
+        // Close (×) button at the top-right corner of the popup.
+        const { node: close } = this.getOrCreateChild(popup, 'CloseButton');
+        this.ensureTransform(close, 44, 44);
+        close.setPosition(popupW / 2 - 32, popupH / 2 - 32, 0);
+        this.reviveCloseButton = close;
+        const closeG = this.ensureGraphics(close);
+        closeG.clear();
+        closeG.fillColor = new Color(0, 0, 0, 26);
+        closeG.circle(0, 0, 20);
+        closeG.fill();
+        closeG.strokeColor = new Color(96, 106, 136, 255);
+        closeG.lineWidth = 3;
+        closeG.moveTo(-6, 6);
+        closeG.lineTo(6, -6);
+        closeG.moveTo(-6, -6);
+        closeG.lineTo(6, 6);
+        closeG.stroke();
+        close.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            this.onReviveDecline();
+        }, this);
+
+        // Swallow any remaining touches so the popup fully blocks the board while visible.
+        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+
+        root.active = false;
+    }
+
+    private showRevivePopup() {
+        if (!this.reviveRoot) return;
+        this.reviveRoot.active = true;
+        this.reviveRoot.setScale(0.92, 0.92, 1);
+        Tween.stopAllByTarget(this.reviveRoot);
+        tween(this.reviveRoot)
+            .to(0.18, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+            .start();
+    }
+
+    private hideRevivePopup() {
+        if (!this.reviveRoot) return;
+        Tween.stopAllByTarget(this.reviveRoot);
+        this.reviveRoot.active = false;
+        this.reviveRoot.setScale(1, 1, 1);
+    }
+
+    private hideReviveAd() {
+        this.unschedule(this.onReviveAdTick);
+        if (this.reviveAdRoot) this.reviveAdRoot.active = false;
+    }
+
+    private createReviveAdNodes() {
+        // 若在 Cocos 编辑器里手动搭建了 ReviveAdRoot 静态节点, 优先读取; 否则回退到代码动态创建。
+        const sceneRoot = this.node.getChildByName('ReviveAdRoot');
+        if (sceneRoot) {
+            this.bindReviveAdNodes(sceneRoot);
+            return;
+        }
+        this.buildReviveAdNodesDynamically();
+    }
+
+    /** 绑定编辑器里手动搭建的 ReviveAdRoot 静态节点(仅需 Countdown 用于倒计时数字)。 */
+    private bindReviveAdNodes(root: Node) {
+        const countNode = root.getChildByName('Countdown');
+        const countLabel = countNode?.getComponent(Label);
+        if (!countLabel) {
+            throw new Error('[BlockBlast] ReviveAdRoot 结构不完整: 需要 Countdown 子节点(Label)');
+        }
+
+        this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
+        root.setPosition(0, 0, 0);
+        this.reviveAdRoot = root;
+        this.reviveAdLabel = countLabel;
+
+        // Graphics 无法在编辑器里序列化绘制内容, 深色背景由代码在运行时补画。
+        const bg = this.ensureGraphics(root);
+        bg.clear();
+        bg.fillColor = new Color(12, 16, 34, 255);
+        bg.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
+        bg.fill();
+
+        root.off(Node.EventType.TOUCH_START);
+        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+
+        root.active = false;
+    }
+
+    /** 编辑器里没有 ReviveAdRoot 时的兜底: 代码动态创建整套广告占位 UI。 */
+    private buildReviveAdNodesDynamically() {
+        const { node: root } = this.getOrCreateChild(this.node, 'ReviveAdRoot');
+        this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
+        root.setPosition(0, 0, 0);
+        this.reviveAdRoot = root;
+
+        // Opaque full-screen background that simulates a rewarded-ad takeover.
+        const bg = this.ensureGraphics(root);
+        bg.clear();
+        bg.fillColor = new Color(12, 16, 34, 255);
+        bg.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
+        bg.fill();
+
+        // "AD" badge.
+        const { node: badgeNode } = this.getOrCreateChild(root, 'AdBadge');
+        this.ensureTransform(badgeNode, 120, 40);
+        badgeNode.setPosition(0, 130, 0);
+        const badge = this.ensureLabel(badgeNode);
+        this.applyLabelStyle(badge, 'heavy', 18, 22, new Color(150, 160, 185, 255));
+        badge.string = 'AD';
+
+        // Countdown number.
+        const { node: countNode } = this.getOrCreateChild(root, 'Countdown');
+        this.ensureTransform(countNode, 200, 120);
+        countNode.setPosition(0, 0, 0);
+        this.reviveAdLabel = this.ensureLabel(countNode);
+        this.applyLabelStyle(this.reviveAdLabel, 'heavy', 72, 80, new Color(255, 255, 255, 255));
+        this.reviveAdLabel.string = '3';
+
+        // Hint text.
+        const { node: hintNode } = this.getOrCreateChild(root, 'Hint');
+        this.ensureTransform(hintNode, 300, 40);
+        hintNode.setPosition(0, -96, 0);
+        const hint = this.ensureLabel(hintNode);
+        this.applyLabelStyle(hint, 'medium', 16, 20, new Color(150, 160, 185, 255));
+        hint.string = 'Game resumes after the ad';
+
+        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+
+        root.active = false;
+    }
+
+    private onReviveContinue() {
+        this.sfx.play('ui_tap');
+        // Play the 3-second ad placeholder before reviving.
+        this.playReviveAd();
+    }
+
+    private playReviveAd() {
+        this.hideRevivePopup();
+        this.reviveAdRoot.active = true;
+        this.reviveAdRemaining = 3;
+        this.updateReviveAdLabel();
+        this.unschedule(this.onReviveAdTick);
+        this.schedule(this.onReviveAdTick, 1);
+    }
+
+    private onReviveAdTick = () => {
+        this.reviveAdRemaining--;
+        if (this.reviveAdRemaining <= 0) {
+            this.unschedule(this.onReviveAdTick);
+            this.reviveAdRoot.active = false;
+            this.finishRevive();
+        } else {
+            this.updateReviveAdLabel();
+        }
+    };
+
+    private updateReviveAdLabel() {
+        if (this.reviveAdLabel) {
+            this.reviveAdLabel.string = `${this.reviveAdRemaining}`;
+        }
+    }
+
+    private finishRevive() {
+        if (this.gameLogic.revive()) {
+            this.gameOverNode.active = false;
+            this.updateView();
+        } else {
+            // No room to revive — fall back to the settlement screen.
+            this.showGameOverScreen();
+        }
+    }
+
+    private onReviveDecline() {
+        this.sfx.play('ui_tap');
+        this.hideRevivePopup();
+        this.showGameOverScreen();
     }
 
     private createVersionLabel() {
@@ -1117,7 +1469,8 @@ export class GameApp extends Component {
                     sys.localStorage.setItem('block_blast_best', this.gameLogic.bestScore.toString());
                     this.promotePreviewCellsToPlaced();
                     if (result.linesCleared > 0) {
-                        this.scheduleClearSequence(result);
+                        const comboLevel = this.updateComboState(result.linesCleared);
+                        this.scheduleClearSequence(result, comboLevel);
                     } else {
                         this.scheduleOnce(() => {
                             this.updateView();
@@ -1160,13 +1513,171 @@ export class GameApp extends Component {
         this.gridPreview.clear();
     }
 
-    private scheduleClearSequence(result: { clearedCells: GridPosition[]; linesCleared: number; gameOver: boolean }) {
+    private scheduleClearSequence(result: PlacementResult, comboLevel: number) {
         this.scheduleOnce(() => {
             this.sfx.play('bb_block_clear');
             this.playPlacementConfetti(result.clearedCells);
+            this.playClearFeedback(result, comboLevel);
             this.updateView();
             if (result.gameOver) this.scheduleOnce(() => this.showGameOver(), 0.35);
         }, 0.12);
+    }
+
+    private createClearFeedbackNodes() {
+        const { node: root } = this.getOrCreateChild(this.node, 'ClearFeedbackRoot');
+        this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
+        root.setPosition(0, 0, 0);
+        this.clearFeedbackRoot = root;
+
+        this.comboLabel = this.buildFeedbackLabel(root, 'ComboLabel', 0, 82, 280, 70, 'bold', 46, 52,
+            new Color(212, 245, 255, 255), 5, new Color(55, 78, 203, 255));
+        this.gradeLabel = this.buildFeedbackLabel(root, 'GradeLabel', 0, 38, 310, 76, 'bold', 54, 60,
+            new Color(31, 171, 255, 255), 4, new Color(203, 236, 255, 255));
+        this.scorePopupLabel = this.buildFeedbackLabel(root, 'ScorePopupLabel', 118, 74, 160, 62, 'bold', 46, 52,
+            new Color(254, 242, 202, 255), 4, new Color(121, 69, 72, 255));
+
+        root.active = false;
+    }
+
+    private buildFeedbackLabel(parent: Node, name: string, x: number, y: number, width: number, height: number,
+        fontKey: keyof typeof FONT_PATHS, fontSize: number, lineHeight: number, color: Color,
+        outlineWidth: number, outlineColor: Color): Label {
+        const { node } = this.getOrCreateChild(parent, name);
+        this.ensureTransform(node, width, height);
+        node.setPosition(x, y, 0);
+        const label = this.ensureLabel(node);
+        this.applyLabelStyle(label, fontKey, fontSize, lineHeight, color, outlineWidth, outlineColor);
+        label.isItalic = true;
+        label.string = '';
+        node.active = false;
+        return label;
+    }
+
+    private resetClearFeedback() {
+        this.feedbackToken++;
+        if (!this.clearFeedbackRoot) return;
+        for (const child of this.clearFeedbackRoot.children) {
+            Tween.stopAllByTarget(child);
+            child.active = false;
+            child.setScale(1, 1, 1);
+        }
+        this.clearFeedbackRoot.active = false;
+    }
+
+    private updateComboState(linesCleared: number): number {
+        if (linesCleared <= 0) return 0;
+        return Math.max(this.gameLogic.consecutiveClears, linesCleared);
+    }
+
+    private playClearFeedback(result: PlacementResult, comboLevel: number): number {
+        if (!this.clearFeedbackRoot || result.clearScore <= 0) return 0;
+
+        const showCombo = comboLevel >= 2;
+        const showGrade = showCombo || result.linesCleared > 1;
+        const showScore = result.linesCleared > 0;
+        if (!showCombo && !showGrade && !showScore) return 0;
+
+        const token = ++this.feedbackToken;
+        this.clearFeedbackRoot.active = true;
+        if (showCombo) {
+            this.playFeedbackLabel(this.comboLabel, `Combo ${comboLevel}`, 0, null, 0.62, 0.2);
+        }
+        const gradeDelay = showCombo ? 0.14 : 0;
+        let scoreDelay = showCombo ? 0.32 : 0;
+        if (showGrade) {
+            const gradeText = this.getClearGradeText(result.linesCleared, comboLevel);
+            this.playGradeLabelByChars(this.gradeLabel, gradeText, gradeDelay, token);
+            scoreDelay = gradeDelay + gradeText.length * 0.045 + 0.18;
+        }
+        if (showScore) {
+            this.playFeedbackLabel(this.scorePopupLabel, result.clearScore.toString(), scoreDelay, this.getScorePopupPosition(result), 0.16, 0.12);
+        }
+
+        const feedbackDuration = Math.max(1.35, scoreDelay + 0.78);
+        this.scheduleOnce(() => {
+            if (token === this.feedbackToken) this.clearFeedbackRoot.active = false;
+        }, feedbackDuration);
+        return feedbackDuration;
+    }
+
+    private getClearGradeText(linesCleared: number, comboLevel: number): string {
+        if (linesCleared >= 4 || comboLevel >= 4) return 'Fantastic!';
+        if (linesCleared >= 3 || comboLevel >= 3) return 'Strong!';
+        return 'Good!';
+    }
+
+    private getScorePopupPosition(result: PlacementResult): Vec3 | null {
+        if (result.linesCleared > 1 && result.placedCells.length > 0) {
+            const clearedSet = new Set(result.clearedCells.map(cell => `${cell.row}:${cell.col}`));
+            const anchor = result.placedCells.slice().reverse().find(cell => clearedSet.has(`${cell.row}:${cell.col}`))
+                ?? result.placedCells[result.placedCells.length - 1];
+            return this.gridCellToLocalPosition(anchor);
+        }
+        if (result.clearedCells.length === 0) return null;
+
+        let x = 0;
+        let y = 0;
+        for (const cell of result.clearedCells) {
+            const pos = this.gridCellToLocalPosition(cell);
+            x += pos.x;
+            y += pos.y;
+        }
+        return new Vec3(x / result.clearedCells.length, y / result.clearedCells.length, 0);
+    }
+
+    private playGradeLabelByChars(label: Label, text: string, delay: number, token: number) {
+        const node = label.node;
+        Tween.stopAllByTarget(node);
+        const originalAlign = label.horizontalAlign;
+        label.horizontalAlign = Label.HorizontalAlign.LEFT;
+        label.string = '';
+        node.active = false;
+        node.setScale(1, 1, 1);
+
+        this.scheduleOnce(() => {
+            if (token !== this.feedbackToken) {
+                label.horizontalAlign = originalAlign;
+                return;
+            }
+            node.active = true;
+            label.string = '';
+            for (let i = 0; i < text.length; i++) {
+                this.scheduleOnce(() => {
+                    if (token !== this.feedbackToken || !node.isValid) return;
+                    label.string = text.slice(0, i + 1);
+                }, i * 0.045);
+            }
+            const holdDelay = text.length * 0.045 + 0.72;
+            tween(node)
+                .delay(holdDelay)
+                .to(0.2, { scale: new Vec3(0.08, 0.08, 1) }, { easing: 'sineIn' })
+                .call(() => {
+                    node.active = false;
+                    node.setScale(1, 1, 1);
+                    label.horizontalAlign = originalAlign;
+                })
+                .start();
+        }, delay);
+    }
+
+    private playFeedbackLabel(label: Label, text: string, delay: number, position?: Vec3 | null, holdDuration = 0.38, shrinkDuration = 0.16) {
+        const node = label.node;
+        Tween.stopAllByTarget(node);
+        label.string = text;
+        if (position) node.setPosition(position);
+        node.active = true;
+        node.setScale(0, 0, 1);
+        tween(node)
+            .delay(delay)
+            .to(0.12, { scale: new Vec3(1.18, 1.18, 1) }, { easing: 'backOut' })
+            .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'sineOut' })
+            .delay(holdDuration)
+            .to(shrinkDuration, { scale: new Vec3(0.08, 0.08, 1) }, { easing: 'sineIn' })
+            .call(() => {
+                node.active = false;
+                node.setScale(1, 1, 1);
+            })
+            .start();
     }
 
     private getShapeVisualCenter(shape: Shape): { row: number; col: number } {
@@ -1305,6 +1816,9 @@ export class GameApp extends Component {
             this.sfx.play('ui_tap');
             this.gameLogic.restart();
             this.gameOverNode.active = false;
+            this.hideRevivePopup();
+            this.hideReviveAd();
+            this.resetClearFeedback();
         }
         GameStatsCollector.startGame();
         Analytics.track('game_start', { reason, best_score: this.gameLogic.bestScore });
@@ -1314,9 +1828,20 @@ export class GameApp extends Component {
     private showGameOver() {
         this.gameOverScoreLabel.string = Math.max(0, Math.floor(this.gameLogic.score)).toString();
         this.gameOverBestLabel.string = Math.max(0, Math.floor(this.gameLogic.bestScore)).toString();
+
+        if (this.gameLogic.reviveCount <= 0) {
+            // 第一次失败: 先弹复活弹窗, 结算页暂不显示(拒绝/复活失败后才进结算页)
+            this.gameOverNode.active = false;
+            this.scheduleOnce(() => this.showRevivePopup(), 0.12);
+        } else {
+            // 复活机会已用过(第二次失败): 直接进结算页
+            this.showGameOverScreen();
+        }
+    }
+
+    /** 真正进入结算页: 显示结算节点 + 上报 game_over 埋点 */
+    private showGameOverScreen() {
         this.gameOverNode.active = true;
-        this.gameOverNode.setScale(0.8, 0.8, 1);
-        const { opacity } = this.gameOverNode;
         this.gameOverNode.setScale(0.85, 0.85, 1);
         tween(this.gameOverNode)
             .to(0.25, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })

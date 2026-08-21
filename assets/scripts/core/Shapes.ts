@@ -145,3 +145,50 @@ export function getTrayShapesWithDDA(count: number, m: DDAMultipliers): Shape[] 
     }
     return shapes;
 }
+
+// ========== Revive small shapes (outside the regular pool: 1/2/3-cell blocks) ==========
+
+// Revive gives the player easy small blocks so a clear is guaranteed. Kept separate from
+// the regular SHAPE_POOL so these mini blocks only appear on revive, not in normal play.
+const REVIVE_SMALL_POOL: WeightedShapeDefinition[] = [
+    { id: 'r1', color: -1, weight: 4, matrix: [[1]] },
+    { id: 'r2h', color: -1, weight: 3, matrix: [[1, 1]] },
+    { id: 'r2v', color: -1, weight: 3, matrix: [[1], [1]] },
+    { id: 'r3h', color: -1, weight: 3, matrix: [[1, 1, 1]] },
+    { id: 'r3v', color: -1, weight: 3, matrix: [[1], [1], [1]] },
+    { id: 'r3l1', color: -1, weight: 2, matrix: [[1, 1], [1, 0]] },
+    { id: 'r3l2', color: -1, weight: 2, matrix: [[1, 0], [1, 1]] },
+];
+
+const REVIVE_SMALL_TOTAL = REVIVE_SMALL_POOL.reduce((sum, s) => sum + s.weight, 0);
+
+export function getReviveSmallShape(): Shape {
+    let roll = Math.random() * REVIVE_SMALL_TOTAL;
+    for (const shape of REVIVE_SMALL_POOL) {
+        roll -= shape.weight;
+        if (roll < 0) {
+            const color = shape.color < 0 ? Math.floor(Math.random() * 7) : shape.color;
+            return matrixToShape(shape.matrix, color);
+        }
+    }
+    const fallback = REVIVE_SMALL_POOL[REVIVE_SMALL_POOL.length - 1];
+    const color = fallback.color < 0 ? Math.floor(Math.random() * 7) : fallback.color;
+    return matrixToShape(fallback.matrix, color);
+}
+
+export function getReviveTrayShapes(count: number): Shape[] {
+    const shapes: Shape[] = [];
+    for (let i = 0; i < count; i++) shapes.push(getReviveSmallShape());
+    return shapes;
+}
+
+/** Build a straight line block of `size` cells (used to deterministically complete a line on revive). */
+export function buildLineShape(size: number, horizontal: boolean, color: number): Shape {
+    const matrix: number[][] = [];
+    if (horizontal) {
+        matrix.push(new Array(size).fill(1));
+    } else {
+        for (let i = 0; i < size; i++) matrix.push([1]);
+    }
+    return matrixToShape(matrix, color);
+}

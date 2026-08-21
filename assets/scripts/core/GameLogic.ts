@@ -1,12 +1,21 @@
 // Block Blast - Game Logic Controller
 
 import { Grid } from './Grid';
-import { getInitialTrayShapes, getTrayShapes, getTrayShapesWithDDA, DDAMultipliers } from './Shapes';
+import {
+    getInitialTrayShapes,
+    getTrayShapes,
+    getTrayShapesWithDDA,
+    getReviveTrayShapes,
+    buildLineShape,
+    DDAMultipliers,
+} from './Shapes';
 import {
     CLEAR_BASE_SCORE_PER_CELL,
     CLEAR_EXTRA_LINE_BONUS_PER_CELL,
     SCORE_PER_PLACED_CELL,
     TRAY_COUNT,
+    GRID_ROWS,
+    GRID_COLS,
 } from './Constants';
 import { PlacementResult, Shape } from './Types';
 
@@ -20,8 +29,9 @@ export class GameLogic {
     // DDA state
     public turnCount: number = 0;
     private lastClearTurn: number = 0;
-    private consecutiveClears: number = 0;
+    public consecutiveClears: number = 0;
     public rescueCount: number = 0;  // rescue triggers per game, max 3
+    public reviveCount: number = 0;  // revive used per game, max 1
 
     // ===== 局内统计(埋点用, GameStatsCollector 结算时读取) =====
     public totalPlacedCells: number = 0;            // 放置的方块格总数
@@ -47,6 +57,7 @@ export class GameLogic {
             success: false,
             linesCleared: 0,
             scoreGained: 0,
+            clearScore: 0,
             gameOver: false,
             placedCells: [],
             clearedCells: [],
@@ -64,6 +75,7 @@ export class GameLogic {
         // Placement score: 1 point per cell in the shape.
         this.grid.place(shape, row, col);
         let scoreGained = shape.cells.length * SCORE_PER_PLACED_CELL;
+        let clearScore = 0;
         this.totalPlacedCells += shape.cells.length;
         const shapeSize = shape.cells.length;
         this.shapeCellsHistogram[shapeSize] = (this.shapeCellsHistogram[shapeSize] ?? 0) + 1;
@@ -82,7 +94,7 @@ export class GameLogic {
                 : this.consecutiveClears >= 3 ? 2.0
                 : this.consecutiveClears >= 2 ? 1.5
                 : 1.0;
-            const clearScore = Math.round(clearedCells.length * scorePerClearedCell * comboMult);
+            clearScore = Math.round(clearedCells.length * scorePerClearedCell * comboMult);
             scoreGained += clearScore;
             // 埋点统计: 消行
             this.totalLinesCleared += totalLines;
@@ -118,7 +130,7 @@ export class GameLogic {
         // Endless mode: no level target; game over only when no candidate can be placed.
         const gameOver = this.checkGameOver();
 
-        return { success: true, linesCleared: totalLines, scoreGained, gameOver, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
+        return { success: true, linesCleared: totalLines, scoreGained, clearScore, gameOver, placedCells, clearedCells, clearedRows: rows, clearedCols: cols };
     }
 
     public refillTray(): void {
@@ -182,6 +194,61 @@ export class GameLogic {
         return true;
     }
 
+    /** Revive after game over: one revive per game. Gives small (1/2/3-cell) blocks that are
+     *  guaranteed to clear a line, then clears the game-over flag. */
+    public revive(): boolean {
+        if (!this.isGameOver || this.reviveCount > 0) return false;
+
+        // Deterministic guarantee: build a small block that exactly fills the line with the fewest
+        // empty cells (1-3 contiguous gaps), so placing it always clears that line.
+        const completion = this.buildLineCompletion();
+        if (completion) {
+            this.tray = [completion, ...getReviveTrayShapes(TRAY_COUNT - 1)];
+            this.isGameOver = false;
+            this.reviveCount++;
+            return true;
+        }
+
+        // Fallback: random small blocks; require at least one to be able to clear a line.
+        for (let attempt = 0; attempt < 60; attempt++) {
+            this.tray = getReviveTrayShapes(TRAY_COUNT);
+            if (this.tray.some(s => s && this.grid.canClearAnywhere(s))) {
+                this.isGameOver = false;
+                this.reviveCount++;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Find the row/column with the fewest contiguous empty cells (1-3) and return a matching line block. */
+    private buildLineCompletion(): Shape | null {
+        let best: { size: number; horizontal: boolean } | null = null;
+
+        for (let r = 0; r < GRID_ROWS; r++) {
+            const gaps: number[] = [];
+            for (let c = 0; c < GRID_COLS; c++) {
+                if (this.grid.getCell(r, c) === 0) gaps.push(c);
+            }
+            if (gaps.length >= 1 && gaps.length <= 3 && isContiguous(gaps)) {
+                if (!best || gaps.length < best.size) best = { size: gaps.length, horizontal: true };
+            }
+        }
+
+        for (let c = 0; c < GRID_COLS; c++) {
+            const gaps: number[] = [];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                if (this.grid.getCell(r, c) === 0) gaps.push(r);
+            }
+            if (gaps.length >= 1 && gaps.length <= 3 && isContiguous(gaps)) {
+                if (!best || gaps.length < best.size) best = { size: gaps.length, horizontal: false };
+            }
+        }
+
+        if (!best) return null;
+        return buildLineShape(best.size, best.horizontal, Math.floor(Math.random() * 7));
+    }
+
     public restart(): void {
         this.grid.clear();
         this.score = 0;
@@ -190,6 +257,7 @@ export class GameLogic {
         this.lastClearTurn = 0;
         this.consecutiveClears = 0;
         this.rescueCount = 0;
+        this.reviveCount = 0;
         this.totalPlacedCells = 0;
         this.totalLinesCleared = 0;
         this.maxLinesOnce = 0;
@@ -200,4 +268,11 @@ export class GameLogic {
         this.shapeCellsHistogram = {};
         this.refillTray();
     }
+}
+
+function isContiguous(values: number[]): boolean {
+    for (let i = 1; i < values.length; i++) {
+        if (values[i] !== values[i - 1] + 1) return false;
+    }
+    return true;
 }
