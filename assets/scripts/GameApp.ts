@@ -571,8 +571,12 @@ export class GameApp extends Component {
         this.reviveCloseButton = closeButton;
 
         // Graphics 无法在编辑器里序列化绘制内容, 遮罩/卡片/× 由代码在运行时补画。
-        if (overlay) {
-            const overlayG = this.ensureGraphics(overlay);
+        // Editor may omit Overlay node — guarantee one exists so the dim background always shows.
+        const overlayNode = overlay ?? this.getOrCreateChild(root, 'Overlay').node;
+        {
+            this.ensureTransform(overlayNode, DESIGN_WIDTH, DESIGN_HEIGHT);
+            overlayNode.setPosition(0, 0, 0);
+            const overlayG = this.ensureGraphics(overlayNode);
             overlayG.clear();
             overlayG.fillColor = new Color(0, 0, 0, 150);
             overlayG.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
@@ -746,7 +750,13 @@ export class GameApp extends Component {
         const countNode = root.getChildByName('Countdown');
         const countLabel = countNode?.getComponent(Label);
         if (!countLabel) {
-            throw new Error('[BlockBlast] ReviveAdRoot 结构不完整: 需要 Countdown 子节点(Label)');
+            // Editor scene is incomplete — fall back to dynamic creation so the
+            // revive flow still works instead of throwing and leaving things half-bound.
+            console.warn('[BlockBlast] ReviveAdRoot 缺 Countdown 子节点, 回退到动态创建');
+            this.reviveAdRoot = null;
+            this.reviveAdLabel = null;
+            this.buildReviveAdNodesDynamically();
+            return;
         }
 
         this.ensureTransform(root, DESIGN_WIDTH, DESIGN_HEIGHT);
@@ -823,12 +833,23 @@ export class GameApp extends Component {
     }
 
     private playReviveAd() {
-        this.hideRevivePopup();
-        this.reviveAdRoot.active = true;
-        this.reviveAdRemaining = 3;
-        this.updateReviveAdLabel();
-        this.unschedule(this.onReviveAdTick);
-        this.schedule(this.onReviveAdTick, 1);
+        try {
+            this.hideRevivePopup();
+            if (!this.reviveAdRoot) {
+                console.warn('[BlockBlast] reviveAdRoot 未初始化, 跳过占位广告');
+                // No ad overlay available — finish immediately so the player can continue.
+                this.finishRevive();
+                return;
+            }
+            this.reviveAdRoot.active = true;
+            this.reviveAdRemaining = 3;
+            this.updateReviveAdLabel();
+            this.unschedule(this.onReviveAdTick);
+            this.schedule(this.onReviveAdTick, 1);
+        } catch (err) {
+            console.warn('[BlockBlast] playReviveAd failed: ' + String(err));
+            this.finishRevive();
+        }
     }
 
     private onReviveAdTick = () => {
