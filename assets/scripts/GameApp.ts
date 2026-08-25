@@ -603,17 +603,21 @@ export class GameApp extends Component {
         closeG.stroke();
 
         continueButton.off(Node.EventType.TOUCH_START);
-        continueButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+        continueButton.off(Node.EventType.TOUCH_END);
+        // Use TOUCH_END so a sibling Button/Graphic on the same node cannot swallow TOUCH_START.
+        continueButton.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             event.propagationStopped = true;
             this.onReviveContinue();
         }, this);
         closeButton.off(Node.EventType.TOUCH_START);
-        closeButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+        closeButton.off(Node.EventType.TOUCH_END);
+        closeButton.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             event.propagationStopped = true;
             this.onReviveDecline();
         }, this);
         root.off(Node.EventType.TOUCH_START);
-        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+        root.off(Node.EventType.TOUCH_END);
+        root.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             event.propagationStopped = true;
         }, this);
 
@@ -678,7 +682,8 @@ export class GameApp extends Component {
         this.applyLabelStyle(this.reviveContinueLabel, 'heavy', 26, 30, new Color(255, 255, 255, 255));
         this.reviveContinueLabel.string = 'Continue';
 
-        button.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+        button.off(Node.EventType.TOUCH_END);
+        button.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             event.propagationStopped = true;
             this.onReviveContinue();
         }, this);
@@ -700,7 +705,8 @@ export class GameApp extends Component {
         closeG.moveTo(-6, -6);
         closeG.lineTo(6, 6);
         closeG.stroke();
-        close.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+        close.off(Node.EventType.TOUCH_END);
+        close.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             event.propagationStopped = true;
             this.onReviveDecline();
         }, this);
@@ -715,6 +721,14 @@ export class GameApp extends Component {
 
     private showRevivePopup() {
         if (!this.reviveRoot) return;
+        // Force to top of sibling order so the dim overlay covers the board
+        // (scene-placed ReviveRoot may sit under boardRoot in the hierarchy).
+        if (this.reviveRoot.parent) {
+            this.reviveRoot.parent.insertChild(
+                this.reviveRoot,
+                this.reviveRoot.parent.children.length
+            );
+        }
         this.reviveRoot.active = true;
         this.reviveRoot.setScale(0.92, 0.92, 1);
         Tween.stopAllByTarget(this.reviveRoot);
@@ -913,7 +927,7 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v3.6.0';
+        label.string = 'v3.7.0';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);
