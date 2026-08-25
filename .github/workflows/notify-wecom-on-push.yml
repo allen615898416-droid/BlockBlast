@@ -1,0 +1,49 @@
+name: Notify WeCom on Push
+
+# 任意分支 push 时触发
+on:
+  push:
+
+jobs:
+  notify:
+    # 所有人推送均通知（含 owner 本人），便于全量感知变更
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push to WeCom bot
+        env:
+          WECOM_BOT_WEBHOOK: ${{ secrets.WECOM_BOT_WEBHOOK }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          COMPARE: ${{ github.event.compare }}
+        run: |
+          if [ -z "$WECOM_BOT_WEBHOOK" ]; then
+            echo "WECOM_BOT_WEBHOOK secret not configured, skip notification"
+            exit 0
+          fi
+          # 遍历本次 push 的所有提交，逐条列出 sha/作者/首行信息
+          COMMITS_LIST=$(jq -r '.commits[] | "- \(.id[0:7]) \(.author.name): \(.message | split("\n")[0])"' "$GITHUB_EVENT_PATH")
+          COMMITS_COUNT=$(jq -r '.commits | length' "$GITHUB_EVENT_PATH")
+          CONTENT=$(cat <<EOF
+          ### [BlockBlast] 仓库收到新推送
+          > 推送者：${ACTOR}
+          > 分支：${BRANCH}
+          > 提交数：${COMMITS_COUNT}
+          > 仓库：${REPO}
+
+          **变更内容：**
+          ${COMMITS_LIST}
+
+          > [查看完整对比](${COMPARE})
+          EOF
+          )
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{msgtype:"markdown",markdown:{content:$c}}')
+          echo "Sending to WeCom bot..."
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WECOM_BOT_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "$PAYLOAD")
+          echo "WeCom response HTTP: $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::WeCom bot returned $CODE"
+          fi
+          echo "done"
