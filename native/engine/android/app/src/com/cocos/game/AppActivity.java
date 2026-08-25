@@ -24,6 +24,7 @@ THE SOFTWARE.
 ****************************************************************************/
 package com.cocos.game;
 
+import android.app.Activity;
 import android.os.Bundle;
 import android.content.Intent;
 import android.content.Context;
@@ -37,9 +38,18 @@ import org.json.JSONObject;
 
 import com.cocos.service.SDKWrapper;
 import com.cocos.lib.CocosActivity;
+import com.cocos.lib.JsbBridgeWrapper;
+import com.cocos.lib.CocosHelper;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.analytics.FirebaseAnalytics;
+import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.rewarded.RewardedAd;
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 
 public class AppActivity extends CocosActivity {
 
@@ -50,21 +60,37 @@ public class AppActivity extends CocosActivity {
     private static final String FIREBASE_APP_ID = "1:373275799800:android:dbf1cfcb3aa743beefcb0d";
     private static final String FIREBASE_PROJECT_ID = "cbd-data-4b6f7";
 
+    // ===== AdMob Rewarded Ad 配置 =====
+    // 测试 ID（Google 官方公开测试单元，展示带 "Test Ad" 标识，不会触发封号）。
+    // 上线前替换为 AdMob 后台创建的正式 ID（strings.xml: admob_rewarded_unit_id）。
+    private static final String ADMOB_REWARDED_UNIT_ID_TEST = "ca-app-pub-3940256099942544/5224354917";
+
     /** 供 JS 侧 native.reflection 调用埋点用的 Context 引用。*/
     private static Context sAppContext;
     /** Firebase Analytics 实例；未成功初始化（占位符未替换）时保持 null，事件桥自动静默降级。*/
     private static FirebaseAnalytics sFirebaseAnalytics;
+
+    /** AdMob Rewarded Ad instance; null when not loaded. */
+    private static RewardedAd sRewardedAd;
+    /** Set true once MobileAds.initialize() has completed. */
+    private static boolean sAdMobInitialized = false;
+    /** Tracks whether the user earned the reward during the current ad session. */
+    private static boolean sRewardEarned = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // DO OTHER INITIALIZATION BELOW
         sAppContext = getApplicationContext();
+        sActivityRef = new java.lang.ref.WeakReference<>(this);
         SDKWrapper.shared().init(this);
 
         // Init Firebase Analytics（手动初始化，AndroidManifest.xml 已移除自动初始化的
         // FirebaseInitProvider，避免它在此行之前抢跑导致的闪退）。
         initFirebaseAnalytics();
+
+        // Init AdMob (async, non-blocking).
+        initAdMob();
     }
 
     private void initFirebaseAnalytics() {
@@ -85,6 +111,115 @@ public class AppActivity extends CocosActivity {
             }
         } catch (Throwable t) {
             android.util.Log.w("Firebase", "initFirebaseAnalytics failed: " + t.getMessage());
+        }
+    }
+
+    // ===== AdMob Rewarded Ad Bridge (JS calls these via native.reflection) =====
+
+    private static void initAdMob() {
+        try {
+            MobileAds.initialize(sAppContext, status -> {
+                sAdMobInitialized = true;
+                // Preload right away so the ad is usually ready before the first game over.
+                preloadRewardedAd();
+            });
+        } catch (Throwable t) {
+            android.util.Log.w("AdMob", "MobileAds.initialize failed: " + t.getMessage());
+        }
+    }
+
+    /** Resolve the rewarded ad unit id: prefer strings.xml override, fall back to the test id. */
+    private static String getRewardedUnitId() {
+        try {
+            int id = sAppContext.getResources().getIdentifier(
+                    "admob_rewarded_unit_id", "string", sAppContext.getPackageName());
+            if (id != 0) {
+                String v = sAppContext.getString(id);
+                if (v != null && !v.isEmpty() && !v.startsWith("REPLACE_WITH_")) return v;
+            }
+        } catch (Exception ignored) {
+        }
+        return ADMOB_REWARDED_UNIT_ID_TEST;
+    }
+
+    /** Preload a rewarded ad. Safe to call repeatedly; no-op when one is already loaded. */
+    public static void preloadRewardedAd() {
+        if (sRewardedAd != null) return;
+        try {
+            AdRequest request = new AdRequest.Builder().build();
+            RewardedAd.load(sAppContext, getRewardedUnitId(), request, new RewardedAdLoadCallback() {
+                @Override
+                public void onAdLoaded(RewardedAd ad) {
+                    sRewardedAd = ad;
+                    dispatchToCocos("ad_loaded", "");
+                    // Auto-reload next ad when this one is consumed.
+                    ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+                        @Override
+                        public void onAdDismissedFullScreenContent() {
+                            sRewardedAd = null;
+                            dispatchToCocos(sRewardEarned ? "ad_rewarded" : "ad_closed", "");
+                            // Preload the next ad for the next game.
+                            preloadRewardedAd();
+                        }
+
+                        @Override
+                        public void onAdFailedToShowFullScreenContent(AdError error) {
+                            sRewardedAd = null;
+                            dispatchToCocos("ad_failed", error.getMessage());
+                            preloadRewardedAd();
+                        }
+                    });
+                }
+
+                @Override
+                public void onAdFailedToLoad(LoadAdError error) {
+                    sRewardedAd = null;
+                    dispatchToCocos("ad_failed", error.getMessage());
+                }
+            });
+        } catch (Throwable t) {
+            android.util.Log.w("AdMob", "preloadRewardedAd failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Show the preloaded rewarded ad. Returns silently when no ad is loaded
+     * (TS side receives nothing and should fall back to the placeholder countdown).
+     */
+    public static void showRewardedAd() {
+        if (sRewardedAd == null) {
+            dispatchToCocos("ad_failed", "not_loaded");
+            return;
+        }
+        try {
+            Activity activity = getActivityInstance();
+            if (activity == null) {
+                dispatchToCocos("ad_failed", "no_activity");
+                return;
+            }
+            sRewardEarned = false;
+            sRewardedAd.show(activity, rewardItem -> {
+                // User watched the ad to the end — grant the reward.
+                sRewardEarned = true;
+            });
+        } catch (Throwable t) {
+            android.util.Log.w("AdMob", "showRewardedAd failed: " + t.getMessage());
+        }
+    }
+
+    private static Activity getActivityInstance() {
+        return sActivityRef != null ? sActivityRef.get() : null;
+    }
+
+    private static java.lang.ref.WeakReference<Activity> sActivityRef;
+
+    /** Java -> Cocos event dispatch, always on the game thread. */
+    private static void dispatchToCocos(String event, String arg) {
+        try {
+            CocosHelper.runOnGameThread(() ->
+                    JsbBridgeWrapper.getInstance().dispatchEventToScript(event, arg));
+        } catch (Throwable t) {
+            android.util.Log.w("AdMob", "dispatchToCocos failed: " + t.getMessage());
         }
     }
 

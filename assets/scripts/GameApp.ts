@@ -6,6 +6,7 @@ import { GridPosition, Shape, PlacementResult } from './core/Types';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, CELL_GAP, TRAY_COUNT, TRAY_CELL_SIZE, SHAPE_COLORS, EMPTY_CELL_COLOR } from './core/Constants';
 import { SfxService } from './services/SfxService';
 import { HapticsService } from './services/HapticsService';
+import { AdService } from './services/AdService';
 import { Analytics } from './core/AnalyticsService';
 import { GameStatsCollector } from './core/GameStatsCollector';
 
@@ -237,6 +238,9 @@ export class GameApp extends Component {
         this.createGameOverNode();
         this.createReviveNodes();
         this.createReviveAdNodes();
+        this.setupAdListeners();
+        // Preload the rewarded ad so it's usually ready before the first game over.
+        AdService.preloadRewarded();
         this.createVersionLabel();
         this.loadCellFrames();
         this.loadVfxFrames();
@@ -812,7 +816,9 @@ export class GameApp extends Component {
 
     private onReviveContinue() {
         this.sfx.play('ui_tap');
-        // Play the 3-second ad placeholder before reviving.
+        // Android native: show the real AdMob rewarded ad (result arrives via callbacks).
+        // Web preview / other platforms: fall back to the 3-second placeholder countdown.
+        if (AdService.showRewarded()) return;
         this.playReviveAd();
     }
 
@@ -852,6 +858,27 @@ export class GameApp extends Component {
         }
     }
 
+    private setupAdListeners() {
+        // Real rewarded ad callbacks (Android native only).
+        AdService.on('ad_rewarded', () => {
+            this.hideReviveAd();
+            this.hideRevivePopup();
+            this.finishRevive();
+        });
+        AdService.on('ad_closed', () => {
+            // User closed the ad before finishing — bring the popup back.
+            this.showRevivePopup();
+        });
+        AdService.on('ad_failed', () => {
+            // Ad unavailable (no fill / not loaded / SDK error) — fall back to the
+            // placeholder countdown so the revive flow still works offline.
+            if (this.reviveRoot && this.reviveRoot.active) {
+                this.playReviveAd();
+            }
+        });
+        // Note: 'ad_loaded' just flips AdService.isLoaded; nothing else to do.
+    }
+
     private onReviveDecline() {
         this.sfx.play('ui_tap');
         this.hideRevivePopup();
@@ -865,7 +892,7 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v3.3.0';
+        label.string = 'v3.5.0';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);

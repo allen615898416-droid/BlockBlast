@@ -26,6 +26,11 @@
         <meta-data android:name="android.app.lib_name"
             android:value="cocos" />
 
+        <!-- AdMob App ID (required; app crashes on ad init without it).
+             Test id below — replace with the real App ID from the AdMob console before release. -->
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
+
         <activity
             android:name="com.cocos.game.AppActivity"
             android:screenOrientation="portrait"

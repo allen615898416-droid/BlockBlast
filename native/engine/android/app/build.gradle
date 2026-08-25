@@ -22,8 +22,8 @@ android {
         // Firebase Analytics 23.x requires minSdk 23 (BlockBlast data tracking)
         minSdkVersion 23
         targetSdkVersion PROP_TARGET_SDK_VERSION
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
 
         externalNativeBuild {
             cmake {
@@ -124,4 +124,6 @@ dependencies {
     // 内部调用了 androidx.core.app.PendingIntentCompat（1.10.0 才新增的类），但各方依赖仲裁
     // 默认选到过低版本会 NoClassDefFoundError 闪退，这里显式覆盖仲裁结果。
     implementation 'androidx.core:core:1.13.1'
+    // AdMob Rewarded Ad（复活看广告）。compileSdk 36 满足 24.x 要求。
+    implementation 'com.google.android.gms:play-services-ads:24.4.0'
 }
