@@ -126,4 +126,6 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     // AdMob Rewarded Ad（复活看广告）。compileSdk 36 满足 24.x 要求。
     implementation 'com.google.android.gms:play-services-ads:24.4.0'
+    // Google User Messaging Platform：启动时征求隐私同意，获准后才请求广告。
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 }

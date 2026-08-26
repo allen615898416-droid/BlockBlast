@@ -29,6 +29,15 @@ import android.os.Bundle;
 import android.content.Intent;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -50,6 +59,9 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.ump.ConsentInformation;
+import com.google.android.ump.ConsentRequestParameters;
+import com.google.android.ump.UserMessagingPlatform;
 
 public class AppActivity extends CocosActivity {
 
@@ -61,9 +73,8 @@ public class AppActivity extends CocosActivity {
     private static final String FIREBASE_PROJECT_ID = "cbd-data-4b6f7";
 
     // ===== AdMob Rewarded Ad 配置 =====
-    // 测试 ID（Google 官方公开测试单元，展示带 "Test Ad" 标识，不会触发封号）。
-    // 上线前替换为 AdMob 后台创建的正式 ID（strings.xml: admob_rewarded_unit_id）。
-    private static final String ADMOB_REWARDED_UNIT_ID_TEST = "ca-app-pub-3940256099942544/5224354917";
+    // 正式广告位以 strings.xml 为准；该常量仅在资源异常时兜底。
+    private static final String ADMOB_REWARDED_UNIT_ID_FALLBACK = "ca-app-pub-3494097960454309/5100535975";
 
     /** 供 JS 侧 native.reflection 调用埋点用的 Context 引用。*/
     private static Context sAppContext;
@@ -76,12 +87,21 @@ public class AppActivity extends CocosActivity {
     private static volatile boolean sRewardedAdLoading = false;
     /** Set true once MobileAds.initialize() has completed. */
     private static volatile boolean sAdMobInitialized = false;
+    /** Latest UMP consent state for this app session. */
+    private static volatile ConsentInformation sConsentInformation;
+    /** Privacy settings entry should be visible only when UMP requires it. */
+    private static volatile boolean sPrivacyOptionsRequired = false;
+    /** Native loading overlay stays above Cocos until the first game scene is ready. */
+    private static volatile View sLaunchLoadingView;
+    /** Avoid native-to-JS events before native.bridge.onNative has been registered. */
+    private static volatile boolean sJsBridgeReady = false;
     /** Tracks whether the user earned the reward during the current ad session. */
     private static boolean sRewardEarned = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        showLaunchLoading();
         // DO OTHER INITIALIZATION BELOW
         sAppContext = getApplicationContext();
         sActivityRef = new java.lang.ref.WeakReference<>(this);
@@ -91,8 +111,83 @@ public class AppActivity extends CocosActivity {
         // FirebaseInitProvider，避免它在此行之前抢跑导致的闪退）。
         initFirebaseAnalytics();
 
-        // Init AdMob (async, non-blocking).
-        initAdMob();
+        // Refresh UMP consent first. AdMob is initialized only after UMP permits ad requests.
+        requestConsentAndInitializeAds();
+    }
+
+    private void showLaunchLoading() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.rgb(20, 35, 68));
+        overlay.setClickable(true);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER);
+
+        TextView title = new TextView(this);
+        title.setText("BLOCKWIN");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
+        title.setGravity(Gravity.CENTER);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+
+        ProgressBar progress = new ProgressBar(this);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        progressParams.topMargin = dp(28);
+        progress.setLayoutParams(progressParams);
+        progress.getIndeterminateDrawable().setTint(Color.WHITE);
+
+        TextView loading = new TextView(this);
+        loading.setText("Loading...");
+        loading.setTextColor(Color.argb(180, 255, 255, 255));
+        loading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        loading.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams loadingParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        loadingParams.topMargin = dp(18);
+        loading.setLayoutParams(loadingParams);
+
+        content.addView(title);
+        content.addView(progress);
+        content.addView(loading);
+        overlay.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        addContentView(overlay, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        sLaunchLoadingView = overlay;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /** Called by JS after the first game scene has been constructed. */
+    public static void notifyGameReady() {
+        android.util.Log.i("BlockWin", "Game scene ready; hiding native loading overlay");
+        sJsBridgeReady = true;
+        final Activity activity = getActivityInstance();
+        if (activity != null) {
+            activity.runOnUiThread(() -> {
+                final View loading = sLaunchLoadingView;
+                if (loading == null) return;
+                loading.animate()
+                        .alpha(0f)
+                        .setDuration(180)
+                        .withEndAction(() -> {
+                            android.view.ViewParent parent = loading.getParent();
+                            if (parent instanceof ViewGroup) {
+                                ((ViewGroup) parent).removeView(loading);
+                            }
+                            sLaunchLoadingView = null;
+                        })
+                        .start();
+            });
+        }
+        dispatchPrivacyStatus();
+        if (sRewardedAd != null) dispatchToCocos("ad_loaded", "");
     }
 
     private void initFirebaseAnalytics() {
@@ -116,17 +211,96 @@ public class AppActivity extends CocosActivity {
         }
     }
 
-    // ===== AdMob Rewarded Ad Bridge (JS calls these via native.reflection) =====
+    // ===== UMP Privacy + AdMob Rewarded Ad Bridge (JS calls these via native.reflection) =====
 
-    private static void initAdMob() {
+    private void requestConsentAndInitializeAds() {
+        final Activity activity = this;
+        sConsentInformation = UserMessagingPlatform.getConsentInformation(activity);
+        ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
+        sConsentInformation.requestConsentInfoUpdate(
+                activity,
+                params,
+                () -> UserMessagingPlatform.loadAndShowConsentFormIfRequired(
+                        activity,
+                        formError -> {
+                            if (formError != null) {
+                                android.util.Log.w("UMP", "Consent form error: code="
+                                        + formError.getErrorCode() + ", message=" + formError.getMessage());
+                            }
+                            refreshPrivacyOptionsStatus();
+                            dispatchPrivacyStatus();
+                            if (sConsentInformation.canRequestAds()) {
+                                initAdMob();
+                            }
+                        }),
+                requestError -> {
+                    android.util.Log.w("UMP", "Consent info update failed: code="
+                            + requestError.getErrorCode() + ", message=" + requestError.getMessage());
+                    refreshPrivacyOptionsStatus();
+                    dispatchPrivacyStatus();
+                    if (sConsentInformation.canRequestAds()) {
+                        initAdMob();
+                    }
+                });
+
+        // A previous-session consent decision may already permit ads while the refresh is in flight.
+        if (sConsentInformation.canRequestAds()) {
+            initAdMob();
+        }
+    }
+
+    private static void refreshPrivacyOptionsStatus() {
+        sPrivacyOptionsRequired = sConsentInformation != null
+                && sConsentInformation.getPrivacyOptionsRequirementStatus()
+                == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
+    }
+
+    private static void dispatchPrivacyStatus() {
+        dispatchToCocos("privacy_status", sPrivacyOptionsRequired ? "required" : "not_required");
+    }
+
+    /** Return whether the in-app Privacy Settings entry must be shown. */
+    public static boolean isPrivacyOptionsRequired() {
+        refreshPrivacyOptionsStatus();
+        return sPrivacyOptionsRequired;
+    }
+
+    /** Re-open the Google-managed privacy choices form from the in-app settings menu. */
+    public static void showPrivacyOptionsForm() {
+        final Activity activity = getActivityInstance();
+        if (activity == null) {
+            dispatchToCocos("privacy_form_closed", "no_activity");
+            return;
+        }
+        activity.runOnUiThread(() -> UserMessagingPlatform.showPrivacyOptionsForm(
+                activity,
+                formError -> {
+                    if (formError != null) {
+                        android.util.Log.w("UMP", "Privacy options form error: code="
+                                + formError.getErrorCode() + ", message=" + formError.getMessage());
+                    }
+                    refreshPrivacyOptionsStatus();
+                    dispatchPrivacyStatus();
+                    dispatchToCocos("privacy_form_closed", formError == null ? "" : formError.getMessage());
+                    if (sConsentInformation != null && sConsentInformation.canRequestAds()) {
+                        initAdMob();
+                    }
+                }));
+    }
+
+    private static synchronized void initAdMob() {
+        if (sAdMobInitialized) {
+            preloadRewardedAd();
+            return;
+        }
+        sAdMobInitialized = true;
         try {
             MobileAds.initialize(sAppContext, status -> {
-                sAdMobInitialized = true;
-                android.util.Log.i("AdMob", "Mobile Ads initialized");
-                // Preload right away so the ad is usually ready before the first game over.
+                android.util.Log.i("AdMob", "Mobile Ads initialized after UMP consent check");
                 preloadRewardedAd();
             });
         } catch (Throwable t) {
+            sAdMobInitialized = false;
             android.util.Log.w("AdMob", "MobileAds.initialize failed: " + t.getMessage());
         }
     }
@@ -142,11 +316,15 @@ public class AppActivity extends CocosActivity {
             }
         } catch (Exception ignored) {
         }
-        return ADMOB_REWARDED_UNIT_ID_TEST;
+        return ADMOB_REWARDED_UNIT_ID_FALLBACK;
     }
 
     /** Preload a rewarded ad. Safe to call repeatedly; no-op when loaded/loading. */
     public static void preloadRewardedAd() {
+        if (sConsentInformation == null || !sConsentInformation.canRequestAds()) {
+            android.util.Log.i("AdMob", "Rewarded preload blocked until UMP permits ad requests");
+            return;
+        }
         if (sRewardedAd != null || sRewardedAdLoading || sAppContext == null) return;
         sRewardedAdLoading = true;
         try {
@@ -244,6 +422,7 @@ public class AppActivity extends CocosActivity {
 
     /** Java -> Cocos event dispatch, always on the game thread. */
     private static void dispatchToCocos(String event, String arg) {
+        if (!sJsBridgeReady) return;
         try {
             CocosHelper.runOnGameThread(() ->
                     JsbBridgeWrapper.getInstance().dispatchEventToScript(event, arg));

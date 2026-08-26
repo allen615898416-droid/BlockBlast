@@ -238,9 +238,12 @@ export class GameApp extends Component {
         this.createGameOverNode();
         this.createReviveNodes();
         this.createReviveAdNodes();
+        this.createPrivacyButton();
         this.setupAdListeners();
-        // Preload the rewarded ad so it's usually ready before the first game over.
-        AdService.preloadRewarded();
+        // UMP may finish before or after the JS bridge binds; polling covers both races.
+        [0.5, 3, 8].forEach(delay => {
+            this.scheduleOnce(() => this.refreshPrivacyButton(), delay);
+        });
         this.createVersionLabel();
         this.loadCellFrames();
         this.loadVfxFrames();
@@ -256,8 +259,9 @@ export class GameApp extends Component {
         input.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
         // ===== 埋点: 应用启动 + 首局开局 =====
-        Analytics.track('app_launch', { version: '3.8.3' });
+        Analytics.track('app_launch', { version: '3.8.8' });
         this.startRound('first');
+        AdService.notifyGameReady();
     }
 
     protected onDestroy() {
@@ -939,6 +943,7 @@ export class GameApp extends Component {
         }
 
         this.nativeReviveAdPending = true;
+        this.setReviveContinueText('Loading...');
         this.armNativeAdTimeout();
         if (AdService.showRewarded()) {
             this.showNativeAdBackdrop();
@@ -946,7 +951,6 @@ export class GameApp extends Component {
             return;
         }
 
-        this.setReviveContinueText('Loading ad...');
         AdService.preloadRewarded();
     }
 
@@ -962,10 +966,18 @@ export class GameApp extends Component {
     }
 
     private setReviveContinueText(text: string): void {
-        const textNode = this.reviveContinueButton?.getChildByName('ButtonText')
+        if (this.reviveContinueLabel) {
+            this.reviveContinueLabel.string = text;
+            return;
+        }
+        const textNode = this.reviveContinueButton?.getChildByName('Label')
+            ?? this.reviveContinueButton?.getChildByName('ButtonText')
             ?? this.reviveContinueButton?.getChildByName('Text');
         const label = textNode?.getComponent(Label);
-        if (label) label.string = text;
+        if (label) {
+            this.reviveContinueLabel = label;
+            label.string = text;
+        }
     }
 
     private showNativeAdBackdrop(): void {
@@ -1063,20 +1075,59 @@ export class GameApp extends Component {
             this.nativeReviveAdPending = false;
             this.reviveAdFlowToken++;
             this.hideReviveAd();
-            this.setReviveContinueText('Ad unavailable');
+            this.setReviveContinueText('Try again');
             this.showRevivePopup();
-            this.scheduleOnce(() => {
-                if (this.reviveRoot?.active && !this.nativeReviveAdPending) {
-                    this.setReviveContinueText('Try again');
-                }
-            }, 1.5);
         });
+        AdService.on('privacy_status', () => this.refreshPrivacyButton());
+        AdService.on('privacy_form_closed', () => this.refreshPrivacyButton());
     }
 
     private onReviveDecline() {
         this.sfx.play('ui_tap');
         this.hideRevivePopup();
         this.showGameOverScreen();
+    }
+
+    private createPrivacyButton(): void {
+        const { node } = this.getOrCreateChild(this.node, 'PrivacyButton');
+        this.privacyButton = node;
+        this.ensureTransform(node, 104, 32);
+        node.setPosition(DESIGN_WIDTH / 2 - 62, -DESIGN_HEIGHT / 2 + 20, 0);
+
+        const background = this.ensureGraphics(node);
+        background.clear();
+        background.fillColor = new Color(18, 31, 65, 150);
+        background.roundRect(-52, -16, 104, 32, 16);
+        background.fill();
+        background.strokeColor = new Color(255, 255, 255, 70);
+        background.lineWidth = 1;
+        background.roundRect(-52, -16, 104, 32, 16);
+        background.stroke();
+
+        const textNode = this.getOrCreateChild(node, 'Text').node;
+        this.ensureTransform(textNode, 92, 24);
+        textNode.setPosition(0, 0, 0);
+        const label = this.ensureLabel(textNode);
+        label.string = 'Privacy';
+        label.font = this.fontAssets.medium;
+        label.fontSize = 13;
+        label.lineHeight = 18;
+        label.color = new Color(255, 255, 255, 210);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.overflow = Label.Overflow.SHRINK;
+
+        this.bindTap(node, () => {
+            this.sfx.play('ui_tap');
+            AdService.showPrivacyOptions();
+        });
+        node.active = false;
+    }
+
+    private refreshPrivacyButton(): void {
+        if (!this.privacyButton) return;
+        this.privacyButton.active = AdService.isPrivacyOptionsRequired();
+        if (this.privacyButton.active) this.moveToTop(this.privacyButton);
     }
 
     private createVersionLabel() {
@@ -1086,7 +1137,7 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v3.8.3';
+        label.string = 'v3.8.8';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);

@@ -3,7 +3,7 @@
 
 import { native, sys } from 'cc';
 
-export type AdEventType = 'ad_loaded' | 'ad_opened' | 'ad_rewarded' | 'ad_closed' | 'ad_failed';
+export type AdEventType = 'ad_loaded' | 'ad_opened' | 'ad_rewarded' | 'ad_closed' | 'ad_failed' | 'privacy_status' | 'privacy_form_closed';
 export type AdEventListener = (arg: string) => void;
 
 const AD_CLASS = 'com/cocos/game/AppActivity';
@@ -21,6 +21,38 @@ class AdServiceClass {
 
     public get isSupported(): boolean {
         return isAndroidNative();
+    }
+
+    public isPrivacyOptionsRequired(): boolean {
+        if (!isAndroidNative()) return false;
+        try {
+            return native.reflection.callStaticMethod(
+                AD_CLASS,
+                'isPrivacyOptionsRequired',
+                SIG_BOOLEAN
+            ) as boolean;
+        } catch {
+            return false;
+        }
+    }
+
+    public showPrivacyOptions(): boolean {
+        if (!isAndroidNative()) return false;
+        try {
+            native.reflection.callStaticMethod(AD_CLASS, 'showPrivacyOptionsForm', SIG_VOID);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public notifyGameReady(): void {
+        if (!isAndroidNative()) return;
+        try {
+            native.reflection.callStaticMethod(AD_CLASS, 'notifyGameReady', SIG_VOID);
+        } catch (error) {
+            console.warn('[AdService] notifyGameReady failed: ' + String(error));
+        }
     }
 
     /** Register listener for ad events. Events only fire on Android native. */
