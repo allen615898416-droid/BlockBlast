@@ -3,11 +3,12 @@
 
 import { native, sys } from 'cc';
 
-export type AdEventType = 'ad_loaded' | 'ad_rewarded' | 'ad_closed' | 'ad_failed';
+export type AdEventType = 'ad_loaded' | 'ad_opened' | 'ad_rewarded' | 'ad_closed' | 'ad_failed';
 export type AdEventListener = (arg: string) => void;
 
 const AD_CLASS = 'com/cocos/game/AppActivity';
 const SIG_VOID = '()V';
+const SIG_BOOLEAN = '()Z';
 
 function isAndroidNative(): boolean {
     return sys.isNative && sys.os === sys.OS.ANDROID;
@@ -17,6 +18,10 @@ class AdServiceClass {
     private listeners = new Map<AdEventType, AdEventListener[]>();
     private bridgeBound = false;
     public isLoaded: boolean = false;
+
+    public get isSupported(): boolean {
+        return isAndroidNative();
+    }
 
     /** Register listener for ad events. Events only fire on Android native. */
     public on(event: AdEventType, listener: AdEventListener): void {
@@ -53,9 +58,15 @@ class AdServiceClass {
     public showRewarded(): boolean {
         if (!isAndroidNative()) return false;
         try {
-            native.reflection.callStaticMethod(AD_CLASS, 'showRewardedAd', SIG_VOID);
-            return true;
+            const accepted = native.reflection.callStaticMethod(
+                AD_CLASS,
+                'showRewardedAd',
+                SIG_BOOLEAN
+            ) as boolean;
+            this.isLoaded = false;
+            return accepted === true;
         } catch {
+            this.isLoaded = false;
             return false;
         }
     }
@@ -76,7 +87,7 @@ class AdServiceClass {
 
     private dispatch(event: AdEventType, arg: string): void {
         if (event === 'ad_loaded') this.isLoaded = true;
-        if (event === 'ad_failed' || event === 'ad_closed') this.isLoaded = false;
+        if (event === 'ad_failed' || event === 'ad_closed' || event === 'ad_rewarded') this.isLoaded = false;
         const list = this.listeners.get(event);
         if (!list) return;
         for (const fn of list) fn(arg);

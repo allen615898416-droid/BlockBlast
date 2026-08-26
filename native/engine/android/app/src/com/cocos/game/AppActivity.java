@@ -71,9 +71,11 @@ public class AppActivity extends CocosActivity {
     private static FirebaseAnalytics sFirebaseAnalytics;
 
     /** AdMob Rewarded Ad instance; null when not loaded. */
-    private static RewardedAd sRewardedAd;
+    private static volatile RewardedAd sRewardedAd;
+    /** Prevent duplicate rewarded-ad load requests while one is already in flight. */
+    private static volatile boolean sRewardedAdLoading = false;
     /** Set true once MobileAds.initialize() has completed. */
-    private static boolean sAdMobInitialized = false;
+    private static volatile boolean sAdMobInitialized = false;
     /** Tracks whether the user earned the reward during the current ad session. */
     private static boolean sRewardEarned = false;
 
@@ -120,6 +122,7 @@ public class AppActivity extends CocosActivity {
         try {
             MobileAds.initialize(sAppContext, status -> {
                 sAdMobInitialized = true;
+                android.util.Log.i("AdMob", "Mobile Ads initialized");
                 // Preload right away so the ad is usually ready before the first game over.
                 preloadRewardedAd();
             });
@@ -142,29 +145,42 @@ public class AppActivity extends CocosActivity {
         return ADMOB_REWARDED_UNIT_ID_TEST;
     }
 
-    /** Preload a rewarded ad. Safe to call repeatedly; no-op when one is already loaded. */
+    /** Preload a rewarded ad. Safe to call repeatedly; no-op when loaded/loading. */
     public static void preloadRewardedAd() {
-        if (sRewardedAd != null) return;
+        if (sRewardedAd != null || sRewardedAdLoading || sAppContext == null) return;
+        sRewardedAdLoading = true;
         try {
+            final String unitId = getRewardedUnitId();
+            android.util.Log.i("AdMob", "Loading rewarded ad");
             AdRequest request = new AdRequest.Builder().build();
-            RewardedAd.load(sAppContext, getRewardedUnitId(), request, new RewardedAdLoadCallback() {
+            RewardedAd.load(sAppContext, unitId, request, new RewardedAdLoadCallback() {
                 @Override
                 public void onAdLoaded(RewardedAd ad) {
+                    sRewardedAdLoading = false;
                     sRewardedAd = ad;
+                    android.util.Log.i("AdMob", "Rewarded ad loaded");
                     dispatchToCocos("ad_loaded", "");
-                    // Auto-reload next ad when this one is consumed.
                     ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+                        @Override
+                        public void onAdShowedFullScreenContent() {
+                            android.util.Log.i("AdMob", "Rewarded ad opened");
+                            dispatchToCocos("ad_opened", "");
+                        }
+
                         @Override
                         public void onAdDismissedFullScreenContent() {
                             sRewardedAd = null;
+                            android.util.Log.i("AdMob", "Rewarded ad closed; earned=" + sRewardEarned);
                             dispatchToCocos(sRewardEarned ? "ad_rewarded" : "ad_closed", "");
-                            // Preload the next ad for the next game.
                             preloadRewardedAd();
                         }
 
                         @Override
                         public void onAdFailedToShowFullScreenContent(AdError error) {
                             sRewardedAd = null;
+                            android.util.Log.e("AdMob", "Rewarded ad show failed: code="
+                                    + error.getCode() + ", domain=" + error.getDomain()
+                                    + ", message=" + error.getMessage());
                             dispatchToCocos("ad_failed", error.getMessage());
                             preloadRewardedAd();
                         }
@@ -173,38 +189,51 @@ public class AppActivity extends CocosActivity {
 
                 @Override
                 public void onAdFailedToLoad(LoadAdError error) {
+                    sRewardedAdLoading = false;
                     sRewardedAd = null;
+                    android.util.Log.e("AdMob", "Rewarded ad load failed: code="
+                            + error.getCode() + ", domain=" + error.getDomain()
+                            + ", message=" + error.getMessage());
                     dispatchToCocos("ad_failed", error.getMessage());
                 }
             });
         } catch (Throwable t) {
-            android.util.Log.w("AdMob", "preloadRewardedAd failed: " + t.getMessage());
+            sRewardedAdLoading = false;
+            android.util.Log.e("AdMob", "preloadRewardedAd failed", t);
+            dispatchToCocos("ad_failed", String.valueOf(t.getMessage()));
         }
     }
 
     /**
-     * Show the preloaded rewarded ad. Returns silently when no ad is loaded
-     * (TS side receives nothing and should fall back to the placeholder countdown).
+     * Show the preloaded rewarded ad and report whether the native request was accepted.
+     * This directly checks native state so an early ad_loaded callback cannot be lost.
      */
-    public static void showRewardedAd() {
-        if (sRewardedAd == null) {
-            dispatchToCocos("ad_failed", "not_loaded");
-            return;
+    public static boolean showRewardedAd() {
+        final RewardedAd ad = sRewardedAd;
+        final Activity activity = getActivityInstance();
+        if (ad == null) {
+            android.util.Log.w("AdMob", "Rewarded ad is not ready");
+            preloadRewardedAd();
+            return false;
         }
-        try {
-            Activity activity = getActivityInstance();
-            if (activity == null) {
-                dispatchToCocos("ad_failed", "no_activity");
-                return;
+        if (activity == null) {
+            android.util.Log.e("AdMob", "Cannot show rewarded ad: no Activity");
+            return false;
+        }
+
+        sRewardedAd = null;
+        sRewardEarned = false;
+        activity.runOnUiThread(() -> {
+            try {
+                ad.setImmersiveMode(true);
+                ad.show(activity, rewardItem -> sRewardEarned = true);
+            } catch (Throwable t) {
+                android.util.Log.e("AdMob", "showRewardedAd failed", t);
+                dispatchToCocos("ad_failed", String.valueOf(t.getMessage()));
+                preloadRewardedAd();
             }
-            sRewardEarned = false;
-            sRewardedAd.show(activity, rewardItem -> {
-                // User watched the ad to the end — grant the reward.
-                sRewardEarned = true;
-            });
-        } catch (Throwable t) {
-            android.util.Log.w("AdMob", "showRewardedAd failed: " + t.getMessage());
-        }
+        });
+        return true;
     }
 
     private static Activity getActivityInstance() {

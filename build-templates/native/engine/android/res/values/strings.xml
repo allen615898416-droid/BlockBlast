@@ -10,4 +10,11 @@
     <string name="google_crash_reporting_api_key" translatable="false">AIzaSyDCmluNB71iRLxy_BuPJ4ph2QAZz_ZLEu4</string>
     <string name="project_id" translatable="false">cbd-data-4b6f7</string>
     <string name="gcm_defaultSenderId" translatable="false">373275799800</string>
+
+    <!-- AdMob Rewarded Ad (revive flow). Replace with real ids from the AdMob console before release:
+         admob_app_id            -> AdMob App ID, format ca-app-pub-XXXX~YYYY (also update AndroidManifest.xml meta-data)
+         admob_rewarded_unit_id  -> Rewarded ad unit id, format ca-app-pub-XXXX/ZZZZ
+         Current values are Google's official public TEST ids (safe to click, never banned). -->
+    <string name="admob_app_id" translatable="false">ca-app-pub-3940256099942544~3347511713</string>
+    <string name="admob_rewarded_unit_id" translatable="false">ca-app-pub-3940256099942544/5224354917</string>
 </resources>

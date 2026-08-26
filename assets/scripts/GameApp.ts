@@ -1,6 +1,6 @@
 // Block Blast v0.1.0 - Mobile Portrait Core Gameplay & Editor-Configurable Presentation Layer
 
-import { _decorator, Component, Node, Graphics, UITransform, Vec3, Color, Label, LabelOutline, Font, view, ResolutionPolicy, sys, macro, EventTouch, Sprite, SpriteFrame, Texture2D, resources, tween, Tween, input, Input, gfx } from 'cc';
+import { _decorator, Component, Node, Graphics, UITransform, Vec2, Vec3, Color, Label, LabelOutline, Font, view, ResolutionPolicy, sys, macro, EventTouch, Sprite, SpriteFrame, Texture2D, resources, tween, Tween, input, Input, gfx } from 'cc';
 import { GameLogic } from './core/GameLogic';
 import { GridPosition, Shape, PlacementResult } from './core/Types';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, CELL_GAP, TRAY_COUNT, TRAY_CELL_SIZE, SHAPE_COLORS, EMPTY_CELL_COLOR } from './core/Constants';
@@ -250,12 +250,13 @@ export class GameApp extends Component {
         this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        input.on(Input.EventType.TOUCH_START, this.onGlobalTouchStart, this);
         input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
         // ===== 埋点: 应用启动 + 首局开局 =====
-        Analytics.track('app_launch', { version: '3.2.0' });
+        Analytics.track('app_launch', { version: '3.8.3' });
         this.startRound('first');
     }
 
@@ -264,6 +265,7 @@ export class GameApp extends Component {
         this.node.off(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.off(Node.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        input.off(Input.EventType.TOUCH_START, this.onGlobalTouchStart, this);
         input.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         input.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
@@ -291,6 +293,73 @@ export class GameApp extends Component {
 
     private ensureLabel(node: Node): Label {
         return node.getComponent(Label) ?? node.addComponent(Label);
+    }
+
+    private bindTap(node: Node, handler: () => void): void {
+        node.off(Node.EventType.TOUCH_START);
+        node.off(Node.EventType.TOUCH_END);
+        node.off(Node.EventType.TOUCH_CANCEL);
+        node.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+            handler();
+        }, this);
+        node.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+        node.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this);
+    }
+
+    private bindTouchSwallow(node: Node): void {
+        node.off(Node.EventType.TOUCH_START);
+        node.off(Node.EventType.TOUCH_END);
+        node.off(Node.EventType.TOUCH_CANCEL);
+        const stop = (event: EventTouch) => {
+            event.propagationStopped = true;
+        };
+        node.on(Node.EventType.TOUCH_START, stop, this);
+        node.on(Node.EventType.TOUCH_END, stop, this);
+        node.on(Node.EventType.TOUCH_CANCEL, stop, this);
+    }
+
+    private moveToTop(node: Node | null): void {
+        const parent = node?.parent;
+        if (!node || !parent) return;
+        node.setSiblingIndex(Math.max(0, parent.children.length - 1));
+    }
+
+    private moveToBottom(node: Node | null): void {
+        if (!node?.parent) return;
+        node.setSiblingIndex(0);
+    }
+
+    private isWorldPointInside(node: Node | null, point: Vec2): boolean {
+        const transform = node?.getComponent(UITransform);
+        if (!transform) return false;
+        const rect = transform.getBoundingBoxToWorld();
+        return point.x >= rect.x && point.x <= rect.x + rect.width
+            && point.y >= rect.y && point.y <= rect.y + rect.height;
+    }
+
+    private tryHandleRevivePopupTouch(event: EventTouch): boolean {
+        if (!this.reviveRoot?.active || this.reviveAdRoot?.active) return false;
+        const point = event.getUILocation();
+        event.propagationStopped = true;
+        if (this.isWorldPointInside(this.reviveContinueButton, point)) {
+            this.onReviveContinue();
+        } else if (this.isWorldPointInside(this.reviveCloseButton, point)) {
+            this.onReviveDecline();
+        }
+        return true;
+    }
+
+    private onGlobalTouchStart = (event: EventTouch) => {
+        this.tryHandleRevivePopupTouch(event);
+    };
+
+    private isReviveModalActive(): boolean {
+        return !!(this.reviveRoot?.active || this.reviveAdRoot?.active);
     }
 
     private hideEditorOnlyNodes() {
@@ -602,24 +671,14 @@ export class GameApp extends Component {
         closeG.lineTo(6, 6);
         closeG.stroke();
 
-        continueButton.off(Node.EventType.TOUCH_START);
-        continueButton.off(Node.EventType.TOUCH_END);
-        // Use TOUCH_END so a sibling Button/Graphic on the same node cannot swallow TOUCH_START.
-        continueButton.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-            this.onReviveContinue();
-        }, this);
-        closeButton.off(Node.EventType.TOUCH_START);
-        closeButton.off(Node.EventType.TOUCH_END);
-        closeButton.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-            this.onReviveDecline();
-        }, this);
+        this.moveToBottom(overlayNode);
+        this.moveToTop(popup);
+        this.bindTouchSwallow(overlayNode);
+        this.bindTap(continueButton, () => this.onReviveContinue());
+        this.bindTap(closeButton, () => this.onReviveDecline());
         root.off(Node.EventType.TOUCH_START);
         root.off(Node.EventType.TOUCH_END);
-        root.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-        }, this);
+        root.off(Node.EventType.TOUCH_CANCEL);
 
         root.active = false;
     }
@@ -682,11 +741,7 @@ export class GameApp extends Component {
         this.applyLabelStyle(this.reviveContinueLabel, 'heavy', 26, 30, new Color(255, 255, 255, 255));
         this.reviveContinueLabel.string = 'Continue';
 
-        button.off(Node.EventType.TOUCH_END);
-        button.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-            this.onReviveContinue();
-        }, this);
+        this.bindTap(button, () => this.onReviveContinue());
 
         // Close (×) button at the top-right corner of the popup.
         const { node: close } = this.getOrCreateChild(popup, 'CloseButton');
@@ -705,16 +760,14 @@ export class GameApp extends Component {
         closeG.moveTo(-6, -6);
         closeG.lineTo(6, 6);
         closeG.stroke();
-        close.off(Node.EventType.TOUCH_END);
-        close.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-            this.onReviveDecline();
-        }, this);
+        this.bindTap(close, () => this.onReviveDecline());
 
-        // Swallow any remaining touches so the popup fully blocks the board while visible.
-        root.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
-            event.propagationStopped = true;
-        }, this);
+        this.moveToBottom(overlay);
+        this.moveToTop(popup);
+        this.bindTouchSwallow(overlay);
+        root.off(Node.EventType.TOUCH_START);
+        root.off(Node.EventType.TOUCH_END);
+        root.off(Node.EventType.TOUCH_CANCEL);
 
         root.active = false;
     }
@@ -723,18 +776,54 @@ export class GameApp extends Component {
         if (!this.reviveRoot) return;
         // Force to top of sibling order so the dim overlay covers the board
         // (scene-placed ReviveRoot may sit under boardRoot in the hierarchy).
-        if (this.reviveRoot.parent) {
-            this.reviveRoot.parent.insertChild(
-                this.reviveRoot,
-                this.reviveRoot.parent.children.length
-            );
-        }
+        this.moveToTop(this.reviveRoot);
+        this.redrawReviveSurfaces();
         this.reviveRoot.active = true;
         this.reviveRoot.setScale(0.92, 0.92, 1);
         Tween.stopAllByTarget(this.reviveRoot);
         tween(this.reviveRoot)
             .to(0.18, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
             .start();
+    }
+
+    private redrawReviveSurfaces(): void {
+        if (!this.reviveRoot || !this.revivePopup) return;
+        const overlayNode = this.reviveRoot.getChildByName('Overlay') ?? this.getOrCreateChild(this.reviveRoot, 'Overlay').node;
+        this.ensureTransform(overlayNode, DESIGN_WIDTH, DESIGN_HEIGHT);
+        overlayNode.setPosition(0, 0, 0);
+        const overlayG = this.ensureGraphics(overlayNode);
+        overlayG.clear();
+        overlayG.fillColor = new Color(0, 0, 0, 150);
+        overlayG.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
+        overlayG.fill();
+
+        const popupW = 300;
+        const popupH = 300;
+        this.ensureTransform(this.revivePopup, popupW, popupH);
+        const popupG = this.ensureGraphics(this.revivePopup);
+        popupG.clear();
+        popupG.fillColor = new Color(255, 255, 255, 255);
+        popupG.roundRect(-popupW / 2, -popupH / 2, popupW, popupH, 28);
+        popupG.fill();
+
+        if (this.reviveCloseButton) {
+            const closeG = this.ensureGraphics(this.reviveCloseButton);
+            closeG.clear();
+            closeG.fillColor = new Color(0, 0, 0, 26);
+            closeG.circle(0, 0, 20);
+            closeG.fill();
+            closeG.strokeColor = new Color(96, 106, 136, 255);
+            closeG.lineWidth = 3;
+            closeG.moveTo(-6, 6);
+            closeG.lineTo(6, -6);
+            closeG.moveTo(-6, -6);
+            closeG.lineTo(6, 6);
+            closeG.stroke();
+        }
+
+        this.moveToBottom(overlayNode);
+        this.moveToTop(this.revivePopup);
+        this.bindTouchSwallow(overlayNode);
     }
 
     private hideRevivePopup() {
@@ -839,11 +928,51 @@ export class GameApp extends Component {
     }
 
     private onReviveContinue() {
+        if (this.nativeReviveAdPending || this.reviveAdRoot?.active) return;
         this.sfx.play('ui_tap');
-        // Android native: show the real AdMob rewarded ad (result arrives via callbacks).
-        // Web preview / other platforms: fall back to the 3-second placeholder countdown.
-        if (AdService.showRewarded()) return;
-        this.playReviveAd();
+
+        // Keep the countdown only as an editor/web preview. Android APK must either
+        // display a real rewarded ad or report that the ad is temporarily unavailable.
+        if (!AdService.isSupported) {
+            this.playReviveAd();
+            return;
+        }
+
+        this.nativeReviveAdPending = true;
+        this.armNativeAdTimeout();
+        if (AdService.showRewarded()) {
+            this.showNativeAdBackdrop();
+            this.hideRevivePopup();
+            return;
+        }
+
+        this.setReviveContinueText('Loading ad...');
+        AdService.preloadRewarded();
+    }
+
+    private armNativeAdTimeout(): void {
+        const token = ++this.reviveAdFlowToken;
+        this.scheduleOnce(() => {
+            if (!this.nativeReviveAdPending || token !== this.reviveAdFlowToken) return;
+            this.nativeReviveAdPending = false;
+            this.hideReviveAd();
+            this.setReviveContinueText('Try again');
+            this.showRevivePopup();
+        }, 8);
+    }
+
+    private setReviveContinueText(text: string): void {
+        const textNode = this.reviveContinueButton?.getChildByName('ButtonText')
+            ?? this.reviveContinueButton?.getChildByName('Text');
+        const label = textNode?.getComponent(Label);
+        if (label) label.string = text;
+    }
+
+    private showNativeAdBackdrop(): void {
+        if (!this.reviveAdRoot) return;
+        this.moveToTop(this.reviveAdRoot);
+        if (this.reviveAdLabel) this.reviveAdLabel.string = '';
+        this.reviveAdRoot.active = true;
     }
 
     private playReviveAd() {
@@ -855,6 +984,7 @@ export class GameApp extends Component {
                 this.finishRevive();
                 return;
             }
+            this.moveToTop(this.reviveAdRoot);
             this.reviveAdRoot.active = true;
             this.reviveAdRemaining = 3;
             this.updateReviveAdLabel();
@@ -884,6 +1014,8 @@ export class GameApp extends Component {
     }
 
     private finishRevive() {
+        this.nativeReviveAdPending = false;
+        this.reviveAdFlowToken++;
         if (this.gameLogic.revive()) {
             this.gameOverNode.active = false;
             this.updateView();
@@ -895,23 +1027,50 @@ export class GameApp extends Component {
 
     private setupAdListeners() {
         // Real rewarded ad callbacks (Android native only).
+        AdService.on('ad_loaded', () => {
+            if (!this.nativeReviveAdPending || !this.reviveRoot?.active) return;
+            if (AdService.showRewarded()) {
+                this.showNativeAdBackdrop();
+                this.hideRevivePopup();
+                return;
+            }
+            this.nativeReviveAdPending = false;
+            this.reviveAdFlowToken++;
+            this.setReviveContinueText('Try again');
+        });
+        AdService.on('ad_opened', () => {
+            this.nativeReviveAdPending = false;
+            this.reviveAdFlowToken++;
+        });
         AdService.on('ad_rewarded', () => {
+            this.nativeReviveAdPending = false;
+            this.reviveAdFlowToken++;
+            this.setReviveContinueText('Continue');
             this.hideReviveAd();
             this.hideRevivePopup();
             this.finishRevive();
         });
         AdService.on('ad_closed', () => {
+            this.nativeReviveAdPending = false;
+            this.reviveAdFlowToken++;
+            this.hideReviveAd();
+            this.setReviveContinueText('Continue');
             // User closed the ad before finishing — bring the popup back.
             this.showRevivePopup();
         });
         AdService.on('ad_failed', () => {
-            // Ad unavailable (no fill / not loaded / SDK error) — fall back to the
-            // placeholder countdown so the revive flow still works offline.
-            if (this.reviveRoot && this.reviveRoot.active) {
-                this.playReviveAd();
-            }
+            if (!this.nativeReviveAdPending) return;
+            this.nativeReviveAdPending = false;
+            this.reviveAdFlowToken++;
+            this.hideReviveAd();
+            this.setReviveContinueText('Ad unavailable');
+            this.showRevivePopup();
+            this.scheduleOnce(() => {
+                if (this.reviveRoot?.active && !this.nativeReviveAdPending) {
+                    this.setReviveContinueText('Try again');
+                }
+            }, 1.5);
         });
-        // Note: 'ad_loaded' just flips AdService.isLoaded; nothing else to do.
     }
 
     private onReviveDecline() {
@@ -927,7 +1086,7 @@ export class GameApp extends Component {
         node.setPosition(-DESIGN_WIDTH / 2 + 40, -DESIGN_HEIGHT / 2 + 16, 0);
         let label = node.getComponent(Label);
         if (!label) label = node.addComponent(Label);
-        label.string = 'v3.8.0';
+        label.string = 'v3.8.3';
         label.fontSize = 12;
         label.lineHeight = 14;
         label.color = new Color(255, 255, 255, 80);
@@ -1455,6 +1614,11 @@ export class GameApp extends Component {
     // ========== Touch Interaction ==========
 
     private onTouchStart(event: EventTouch) {
+        if (this.tryHandleRevivePopupTouch(event)) return;
+        if (this.isReviveModalActive()) {
+            event.propagationStopped = true;
+            return;
+        }
         if (this.gameLogic.isGameOver) return;
 
         const uiPos = event.getUILocation();
@@ -1494,6 +1658,10 @@ export class GameApp extends Component {
     }
 
     private onTouchMove(event: EventTouch) {
+        if (this.isReviveModalActive()) {
+            event.propagationStopped = true;
+            return;
+        }
         if (this.dragShapeIndex < 0) return;
 
         const uiPos = event.getUILocation();
@@ -1506,6 +1674,10 @@ export class GameApp extends Component {
     }
 
     private onTouchEnd(event: EventTouch) {
+        if (this.isReviveModalActive()) {
+            event.propagationStopped = true;
+            return;
+        }
         if (this.dragShapeIndex < 0) return;
 
         const uiPos = event.getUILocation();
