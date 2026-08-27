@@ -778,6 +778,11 @@ export class GameApp extends Component {
 
     private showRevivePopup() {
         if (!this.reviveRoot) return;
+        // ===== 埋点: 复活弹窗展示(复活广告漏斗起点) =====
+        Analytics.track('revive_popup_shown', {
+            revive_count: this.gameLogic.reviveCount,
+            score: Math.max(0, Math.floor(this.gameLogic.score)),
+        });
         // Force to top of sibling order so the dim overlay covers the board
         // (scene-placed ReviveRoot may sit under boardRoot in the hierarchy).
         this.moveToTop(this.reviveRoot);
@@ -934,6 +939,11 @@ export class GameApp extends Component {
     private onReviveContinue() {
         if (this.nativeReviveAdPending || this.reviveAdRoot?.active) return;
         this.sfx.play('ui_tap');
+        // ===== 埋点: 点击继续, 尝试展示广告 =====
+        Analytics.track('revive_ad_click', {
+            revive_count: this.gameLogic.reviveCount,
+            ad_supported: AdService.isSupported ? 1 : 0,
+        });
 
         // Keep the countdown only as an editor/web preview. Android APK must either
         // display a real rewarded ad or report that the ad is temporarily unavailable.
@@ -962,6 +972,8 @@ export class GameApp extends Component {
             this.hideReviveAd();
             this.setReviveContinueText('Try again');
             this.showRevivePopup();
+            // ===== 埋点: 广告 8s 无响应超时 =====
+            Analytics.track('revive_ad_timeout', { revive_count: this.gameLogic.reviveCount });
         }, 8);
     }
 
@@ -1031,9 +1043,19 @@ export class GameApp extends Component {
         if (this.gameLogic.revive()) {
             this.gameOverNode.active = false;
             this.updateView();
+            // ===== 埋点: 复活生效 =====
+            Analytics.track('revive_success', {
+                revive_count: this.gameLogic.reviveCount,
+                score: Math.max(0, Math.floor(this.gameLogic.score)),
+            });
         } else {
             // No room to revive — fall back to the settlement screen.
             this.showGameOverScreen();
+            // ===== 埋点: 复活失败(无空间可放置) =====
+            Analytics.track('revive_failed', {
+                revive_count: this.gameLogic.reviveCount,
+                score: Math.max(0, Math.floor(this.gameLogic.score)),
+            });
         }
     }
 
@@ -1041,6 +1063,8 @@ export class GameApp extends Component {
         // Real rewarded ad callbacks (Android native only).
         AdService.on('ad_loaded', () => {
             if (!this.nativeReviveAdPending || !this.reviveRoot?.active) return;
+            // ===== 埋点: 等待期间广告就绪 =====
+            Analytics.track('revive_ad_loaded', { revive_count: this.gameLogic.reviveCount });
             if (AdService.showRewarded()) {
                 this.showNativeAdBackdrop();
                 this.hideRevivePopup();
@@ -1053,6 +1077,8 @@ export class GameApp extends Component {
         AdService.on('ad_opened', () => {
             this.nativeReviveAdPending = false;
             this.reviveAdFlowToken++;
+            // ===== 埋点: 广告正式展示 =====
+            Analytics.track('revive_ad_show', { revive_count: this.gameLogic.reviveCount });
         });
         AdService.on('ad_rewarded', () => {
             this.nativeReviveAdPending = false;
@@ -1061,6 +1087,11 @@ export class GameApp extends Component {
             this.hideReviveAd();
             this.hideRevivePopup();
             this.finishRevive();
+            // ===== 埋点: 看完广告获得奖励 =====
+            Analytics.track('revive_ad_rewarded', {
+                revive_count: this.gameLogic.reviveCount,
+                score: Math.max(0, Math.floor(this.gameLogic.score)),
+            });
         });
         AdService.on('ad_closed', () => {
             this.nativeReviveAdPending = false;
@@ -1069,6 +1100,8 @@ export class GameApp extends Component {
             this.setReviveContinueText('Continue');
             // User closed the ad before finishing — bring the popup back.
             this.showRevivePopup();
+            // ===== 埋点: 广告提前关闭(未看完) =====
+            Analytics.track('revive_ad_closed', { revive_count: this.gameLogic.reviveCount });
         });
         AdService.on('ad_failed', () => {
             if (!this.nativeReviveAdPending) return;
@@ -1077,6 +1110,8 @@ export class GameApp extends Component {
             this.hideReviveAd();
             this.setReviveContinueText('Try again');
             this.showRevivePopup();
+            // ===== 埋点: 广告加载/展示失败 =====
+            Analytics.track('revive_ad_failed', { revive_count: this.gameLogic.reviveCount });
         });
         AdService.on('privacy_status', () => this.refreshPrivacyButton());
         AdService.on('privacy_form_closed', () => this.refreshPrivacyButton());
@@ -1086,6 +1121,11 @@ export class GameApp extends Component {
         this.sfx.play('ui_tap');
         this.hideRevivePopup();
         this.showGameOverScreen();
+        // ===== 埋点: 拒绝复活 =====
+        Analytics.track('revive_declined', {
+            revive_count: this.gameLogic.reviveCount,
+            score: Math.max(0, Math.floor(this.gameLogic.score)),
+        });
     }
 
     private createPrivacyButton(): void {
@@ -2151,6 +2191,7 @@ export class GameApp extends Component {
                 turns: logic.turnCount,
                 refills: logic.refills,
                 rescues: logic.rescueCount,
+                reviveCount: logic.reviveCount,
                 clearsByLines: logic.clearsByLines,
                 shapeCellsHistogram: logic.shapeCellsHistogram,
             },

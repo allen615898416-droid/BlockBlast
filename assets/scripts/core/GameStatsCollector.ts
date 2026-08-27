@@ -94,6 +94,7 @@ class GameStatsCollectorImpl {
             turns: number;
             refills: number;
             rescues: number;
+            reviveCount: number;
             clearsByLines: Record<number, number>;
             shapeCellsHistogram: Record<number, number>;
         },
@@ -131,6 +132,7 @@ class GameStatsCollectorImpl {
             turns: logic.turns,
             tray_refills: logic.refills,
             rescues: logic.rescues,
+            revive_used: logic.reviveCount > 0 ? 1 : 0,
             // 终局棋盘(empty_cells 由 fill_rate 推导)
             end_fill_rate: Math.round(endGrid.fillRate * 1000) / 10,
         };
