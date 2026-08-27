@@ -35,3 +35,9 @@ Thumbs.db
 /皇冠.png
 /设置.png
 .gradle/
+
+# Local CLI build artifacts & backup dir (never push)
+.gradle-home/
+backup/
+build-cli.log
+gradle-build.log
