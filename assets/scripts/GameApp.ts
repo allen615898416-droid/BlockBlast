@@ -237,10 +237,12 @@ export class GameApp extends Component {
         this.createClearFeedbackNodes();
         this.createGameOverNode();
         this.createReviveNodes();
-        this.createReviveAdNodes();
-        this.setupAdListeners();
-        // Preload the rewarded ad so it's usually ready before the first game over.
-        AdService.preloadRewarded();
+        // No-ad build: skip ad backdrop node creation, ad event listeners, and
+        // the AdMob preload network request. AdService/AppActivity stay in tree
+        // but are never invoked.
+        // this.createReviveAdNodes();
+        // this.setupAdListeners();
+        // AdService.preloadRewarded();
         this.createVersionLabel();
         this.loadCellFrames();
         this.loadVfxFrames();
@@ -931,23 +933,11 @@ export class GameApp extends Component {
         if (this.nativeReviveAdPending || this.reviveAdRoot?.active) return;
         this.sfx.play('ui_tap');
 
-        // Keep the countdown only as an editor/web preview. Android APK must either
-        // display a real rewarded ad or report that the ad is temporarily unavailable.
-        if (!AdService.isSupported) {
-            this.playReviveAd();
-            return;
-        }
-
-        this.nativeReviveAdPending = true;
-        this.armNativeAdTimeout();
-        if (AdService.showRewarded()) {
-            this.showNativeAdBackdrop();
-            this.hideRevivePopup();
-            return;
-        }
-
-        this.setReviveContinueText('Loading ad...');
-        AdService.preloadRewarded();
+        // No-ad build: skip the rewarded ad entirely and grant the revive
+        // immediately. The AdMob SDK files are left in place but no longer
+        // invoked from the revive flow.
+        this.hideRevivePopup();
+        this.finishRevive();
     }
 
     private armNativeAdTimeout(): void {

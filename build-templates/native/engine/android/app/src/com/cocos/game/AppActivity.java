@@ -92,7 +92,10 @@ public class AppActivity extends CocosActivity {
         initFirebaseAnalytics();
 
         // Init AdMob (async, non-blocking).
-        initAdMob();
+        // No-ad build: AdMob initialization disabled. The rewarded ad is never
+        // shown (GameApp.onReviveContinue grants revive directly), so skip the
+        // MobileAds.initialize() + preload network request at startup.
+        // initAdMob();
     }
 
     private void initFirebaseAnalytics() {
